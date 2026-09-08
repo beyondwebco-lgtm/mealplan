@@ -354,6 +354,59 @@ router.post('/reset-demo', async (_req, res) => {
   }
 });
 
+router.post('/ai/generate-meal-plan', async (req, res) => {
+  try {
+    const { members, apiKey } = req.body;
+    const { generateAIMealPlan } = await import('../server/ai');
+    const plan = await generateAIMealPlan(members || [], apiKey);
+    res.json({ success: true, mealPlan: plan });
+  } catch (err: any) {
+    console.error('AI Meal Plan generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate meal plan with Gemini AI' });
+  }
+});
+
+router.post('/ai/recipe', async (req, res) => {
+  try {
+    const { dish, apiKey } = req.body;
+    if (!dish) return res.status(400).json({ error: 'Dish name is required' });
+    const { generateAIRecipe } = await import('../server/ai');
+    const recipe = await generateAIRecipe(dish, apiKey);
+    res.json({ success: true, recipe });
+  } catch (err: any) {
+    console.error('AI Recipe generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate recipe with Gemini AI' });
+  }
+});
+
+router.post('/ai/chat', async (req, res) => {
+  try {
+    const { messages, groupContext, apiKey } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array is required' });
+    }
+    const { generateAIChat } = await import('../server/ai');
+    const reply = await generateAIChat(messages, groupContext, apiKey);
+    res.json({ success: true, reply });
+  } catch (err: any) {
+    console.error('AI Chat generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate chat response' });
+  }
+});
+
+router.post('/ai/validate-key', async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey) return res.status(400).json({ error: 'API key is required' });
+    const { validateGeminiKey } = await import('../server/ai');
+    const result = await validateGeminiKey(apiKey);
+    res.json(result);
+  } catch (err: any) {
+    console.error('AI Key validation error:', err);
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
 // Support both /api prefix and direct root
 app.use('/api', router);
 app.use('/', router);

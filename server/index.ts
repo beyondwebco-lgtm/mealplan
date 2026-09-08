@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { pool, initDb } from './db';
+import { generateAIMealPlan, generateAIRecipe, generateAIChat, validateGeminiKey } from './ai';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -179,6 +180,59 @@ app.put('/api/groups/:id/mealplan', async (req, res) => {
   }
 });
 
+// POST Gemini AI generate weekly meal plan
+app.post('/api/ai/generate-meal-plan', async (req, res) => {
+  try {
+    const { members, style } = req.body;
+    const plan = await generateAIMealPlan(members || [], style);
+    res.json({ success: true, mealPlan: plan });
+  } catch (err: any) {
+    console.error('AI Meal Plan generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate meal plan with Gemini AI' });
+  }
+});
+
+// POST Gemini AI recipe guide
+app.post('/api/ai/recipe', async (req, res) => {
+  try {
+    const { dish, apiKey } = req.body;
+    if (!dish) return res.status(400).json({ error: 'Dish name is required' });
+    const recipe = await generateAIRecipe(dish, apiKey);
+    res.json({ success: true, recipe });
+  } catch (err: any) {
+    console.error('AI Recipe generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate recipe with Gemini AI' });
+  }
+});
+
+// POST Gemini AI interactive chat
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { messages, groupContext, apiKey } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array is required' });
+    }
+    const reply = await generateAIChat(messages, groupContext, apiKey);
+    res.json({ success: true, reply });
+  } catch (err: any) {
+    console.error('AI Chat generation error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate chat response' });
+  }
+});
+
+// POST Gemini AI validate API key
+app.post('/api/ai/validate-key', async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey) return res.status(400).json({ error: 'API key is required' });
+    const result = await validateGeminiKey(apiKey);
+    res.json(result);
+  } catch (err: any) {
+    console.error('AI Key validation error:', err);
+    res.status(500).json({ valid: false, error: err.message });
+  }
+});
+
 // POST reset to sample demo data
 app.post('/api/reset-demo', async (_req, res) => {
   try {
@@ -252,7 +306,7 @@ app.post('/api/reset-demo', async (_req, res) => {
 initDb()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`🚀 PostgreSQL Backend Server running on http://localhost:${PORT}`);
+      console.log(`🚀 Server running with Gemini AI & PostgreSQL on http://localhost:${PORT}`);
     });
   })
   .catch((err) => {

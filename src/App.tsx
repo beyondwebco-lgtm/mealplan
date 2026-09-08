@@ -18,6 +18,7 @@ import { WeeklyMealPlan } from './components/WeeklyMealPlan';
 import { AddMemberModal } from './components/AddMemberModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
 import { JoinGroupModal } from './components/JoinGroupModal';
+import { AIChatWidget } from './components/AIChatWidget';
 import { ToastContainer } from './components/Toast';
 import { Loader2, Database } from 'lucide-react';
 
@@ -311,6 +312,28 @@ export function App() {
     }
   };
 
+  const [isGeneratingAIPlan, setIsGeneratingAIPlan] = useState<boolean>(false);
+
+  const handleGenerateAIPlan = async () => {
+    try {
+      setIsGeneratingAIPlan(true);
+      const customKey = localStorage.getItem('mealplan_gemini_custom_api_key') || undefined;
+      const useCustom = localStorage.getItem('mealplan_gemini_use_custom_key') === 'true';
+      const keyToUse = useCustom && customKey ? customKey : undefined;
+
+      showToast('AI Chef is generating a weekly meal plan tailored to your group...', 'info');
+      const newPlan = await api.generateAIMealPlan(activeGroup.members, keyToUse);
+      const updatedGroup = await api.updateMealPlan(activeGroup.id, newPlan);
+      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
+      showToast('AI generated full 7-day meal plan based on member tastes!', 'success');
+    } catch (err: any) {
+      console.error('AI Meal Plan error:', err);
+      showToast(`AI generation error: ${err.message || 'Failed to generate'}`, 'error');
+    } finally {
+      setIsGeneratingAIPlan(false);
+    }
+  };
+
   // Group Management
   const handleCreateGroup = async (groupName: string, creatorName: string) => {
     try {
@@ -433,6 +456,8 @@ export function App() {
                   members={activeGroup.members}
                   onChangeMeal={handleChangeMeal}
                   onClearPlan={handleClearMealPlan}
+                  onGenerateAIPlan={handleGenerateAIPlan}
+                  isGeneratingAIPlan={isGeneratingAIPlan}
                 />
               </>
             )}
@@ -458,6 +483,8 @@ export function App() {
                 members={activeGroup.members}
                 onChangeMeal={handleChangeMeal}
                 onClearPlan={handleClearMealPlan}
+                onGenerateAIPlan={handleGenerateAIPlan}
+                isGeneratingAIPlan={isGeneratingAIPlan}
               />
             )}
 
@@ -493,6 +520,13 @@ export function App() {
         onClose={() => setIsJoinGroupOpen(false)}
         onSelectGroup={handleSelectGroup}
         onJoinByCode={handleJoinByCode}
+      />
+
+      {/* Floating AI Chat Widget at bottom right */}
+      <AIChatWidget
+        activeGroup={activeGroup}
+        onUpdateMealPlan={handleChangeMeal}
+        showToast={showToast}
       />
 
       {/* Toast Notifications */}

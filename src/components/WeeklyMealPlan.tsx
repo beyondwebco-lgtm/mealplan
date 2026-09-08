@@ -1,7 +1,7 @@
 import React from 'react';
 import type { DayKey, Member, WeeklyMealPlan as WeeklyMealPlanType, MealSlot } from '../types';
 import { MealDayCard } from './MealDayCard';
-import { Calendar, Trash2, Sparkles } from 'lucide-react';
+import { Calendar, Trash2, Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { calculateMostLiked } from '../utils/preferenceCalculations';
 
 interface WeeklyMealPlanProps {
@@ -9,6 +9,8 @@ interface WeeklyMealPlanProps {
   members: Member[];
   onChangeMeal: (dayKey: DayKey, mealType: keyof MealSlot, value: string) => void;
   onClearPlan: () => void;
+  onGenerateAIPlan?: () => void;
+  isGeneratingAIPlan?: boolean;
 }
 
 const DAYS: { key: DayKey; label: string; dayIndex: number }[] = [
@@ -26,6 +28,8 @@ export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({
   members,
   onChangeMeal,
   onClearPlan,
+  onGenerateAIPlan,
+  isGeneratingAIPlan = false,
 }) => {
   const currentDayIndex = new Date().getDay();
   const mostLikedDishes = calculateMostLiked(members).map((d) => d.dish);
@@ -58,8 +62,30 @@ export const WeeklyMealPlan: React.FC<WeeklyMealPlanProps> = ({
           </p>
         </div>
 
-        {/* Clear / Action */}
+        {/* AI Auto-Plan & Clear Actions */}
         <div className="flex items-center gap-2">
+          {onGenerateAIPlan && (
+            <button
+              type="button"
+              disabled={isGeneratingAIPlan}
+              onClick={onGenerateAIPlan}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              title="Generate 7-day meal plan based on likes and avoiding dislikes"
+            >
+              {isGeneratingAIPlan ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>AI Generating Plan...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-3.5 h-3.5 text-amber-300" />
+                  <span>AI Auto-Plan Week</span>
+                </>
+              )}
+            </button>
+          )}
+
           {plannedCount > 0 && (
             <button
               type="button"
