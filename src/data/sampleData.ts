@@ -1,102 +1,114 @@
-import type { Group, WeeklyMealPlan } from '../types';
-
-export const initialMealPlan: WeeklyMealPlan = {
-  monday: {
-    breakfast: 'Idli & Sambar',
-    lunch: 'Dal Tadka + Rice',
-    dinner: 'Paneer Butter Masala + Roti',
-  },
-  tuesday: {
-    breakfast: 'Poha',
-    lunch: 'Aloo Curry + Chapati',
-    dinner: 'Dal Tadka + Jeera Rice',
-  },
-  wednesday: {
-    breakfast: 'Upma',
-    lunch: 'Vegetable Biryani + Raita',
-    dinner: 'Paneer Butter Masala + Phulka',
-  },
-  thursday: {
-    breakfast: 'Dosa with Chutney',
-    lunch: 'Dal Tadka + Steamed Rice',
-    dinner: 'Chicken Curry / Paneer + Roti',
-  },
-  friday: {
-    breakfast: 'Paratha with Curd',
-    lunch: 'Aloo Curry + Rice',
-    dinner: 'Vegetable Biryani',
-  },
-  saturday: {
-    breakfast: 'Puri Bhaji',
-    lunch: 'Paneer Butter Masala + Naan',
-    dinner: 'Dal Tadka + Roti',
-  },
-  sunday: {
-    breakfast: 'Masala Omelette / Paneer Toast',
-    lunch: 'Special Dum Biryani + Salan',
-    dinner: 'Light Khichdi & Papad',
-  },
-};
-
-export const emptyMealPlan: WeeklyMealPlan = {
-  monday: { breakfast: '', lunch: '', dinner: '' },
-  tuesday: { breakfast: '', lunch: '', dinner: '' },
-  wednesday: { breakfast: '', lunch: '', dinner: '' },
-  thursday: { breakfast: '', lunch: '', dinner: '' },
-  friday: { breakfast: '', lunch: '', dinner: '' },
-  saturday: { breakfast: '', lunch: '', dinner: '' },
-  sunday: { breakfast: '', lunch: '', dinner: '' },
-};
+import type { Group, Member, Dish } from '../types';
 
 export const sampleGroup: Group = {
-  id: 'group-our-weekly-meals',
-  name: 'Our Weekly Meals',
-  creatorName: 'Maneesh',
+  id: 'group-our-meals',
+  name: 'Our Group',
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  members: [
-    {
-      id: 'member-maneesh',
-      name: 'Maneesh',
-      avatarColor: 'bg-emerald-700',
-      likes: [
-        'Paneer Butter Masala',
-        'Dal Tadka',
-        'Vegetable Biryani',
-        'Roti',
-      ],
-      dislikes: [
-        'Bitter Gourd Curry',
-      ],
-    },
-    {
-      id: 'member-jinka',
-      name: 'Jinka',
-      avatarColor: 'bg-teal-700',
-      likes: [
-        'Dal Tadka',
-        'Paneer Butter Masala',
-        'Chapati',
-        'Aloo Curry',
-      ],
-      dislikes: [
-        'Fish Curry',
-      ],
-    },
-    {
-      id: 'member-vishwa',
-      name: 'Vishwa',
-      avatarColor: 'bg-amber-700',
-      likes: [
-        'Chicken Curry',
-        'Vegetable Biryani',
-        'Dal Tadka',
-        'Dosa with Chutney',
-      ],
-      dislikes: [
-        'Brinjal Curry',
-      ],
-    },
-  ],
-  mealPlan: initialMealPlan,
 };
+
+export const sampleMembers: Member[] = [
+  {
+    id: 'member-maneesh',
+    groupId: 'group-our-meals',
+    name: 'Maneesh',
+    avatarColor: 'bg-emerald-700',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'member-jinka',
+    groupId: 'group-our-meals',
+    name: 'Jinka',
+    avatarColor: 'bg-teal-700',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'member-vishwa',
+    groupId: 'group-our-meals',
+    name: 'Vishwa',
+    avatarColor: 'bg-amber-700',
+    createdAt: new Date().toISOString(),
+  },
+];
+
+export const sampleDishes: Dish[] = [
+  {
+    id: 'dish-1',
+    groupId: 'group-our-meals',
+    name: 'Paneer Butter Masala',
+    suggestedBy: 'Maneesh',
+    suggestedByMemberId: 'member-maneesh',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    likes: ['member-maneesh', 'member-jinka', 'member-vishwa'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-2',
+    groupId: 'group-our-meals',
+    name: 'Dosa',
+    suggestedBy: 'Vishwa',
+    suggestedByMemberId: 'member-vishwa',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    likes: ['member-vishwa', 'member-maneesh', 'member-jinka'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-3',
+    groupId: 'group-our-meals',
+    name: 'Dal Tadka',
+    suggestedBy: 'Vishwa',
+    suggestedByMemberId: 'member-vishwa',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+    likes: ['member-vishwa', 'member-maneesh', 'member-jinka'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-4',
+    groupId: 'group-our-meals',
+    name: 'Idli',
+    suggestedBy: 'Maneesh',
+    suggestedByMemberId: 'member-maneesh',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    likes: ['member-maneesh', 'member-jinka'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-5',
+    groupId: 'group-our-meals',
+    name: 'Vegetable Biryani',
+    suggestedBy: 'Jinka',
+    suggestedByMemberId: 'member-jinka',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(),
+    likes: ['member-jinka', 'member-maneesh'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-6',
+    groupId: 'group-our-meals',
+    name: 'Upma',
+    suggestedBy: 'Maneesh',
+    suggestedByMemberId: 'member-maneesh',
+    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    likes: ['member-maneesh'],
+    dislikes: [],
+  },
+  {
+    id: 'dish-7',
+    groupId: 'group-our-meals',
+    name: 'Bitter Gourd Curry',
+    suggestedBy: 'Jinka',
+    suggestedByMemberId: 'member-jinka',
+    createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    likes: [],
+    dislikes: ['member-maneesh'],
+  },
+  {
+    id: 'dish-8',
+    groupId: 'group-our-meals',
+    name: 'Brinjal Curry',
+    suggestedBy: 'Maneesh',
+    suggestedByMemberId: 'member-maneesh',
+    createdAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    likes: [],
+    dislikes: ['member-vishwa', 'member-maneesh'],
+  },
+];

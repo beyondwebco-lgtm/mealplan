@@ -1,89 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
-import type {
-  Group,
-  Member,
-  NavigationTab,
-  DayKey,
-  MealSlot,
-  Toast,
-} from './types';
-import { sampleGroup } from './data/sampleData';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { AppState, Toast as ToastType } from './types';
+import { sampleGroup, sampleMembers, sampleDishes } from './data/sampleData';
 import { api } from './services/api';
 import { Navbar } from './components/Navbar';
-import { HeroLanding } from './components/HeroLanding';
-import { DashboardHeader } from './components/DashboardHeader';
-import { MemberList } from './components/MemberList';
-import { PreferenceSummary } from './components/PreferenceSummary';
-import { WeeklyMealPlan } from './components/WeeklyMealPlan';
-import { AddMemberModal } from './components/AddMemberModal';
-import { CreateGroupModal } from './components/CreateGroupModal';
-import { JoinGroupModal } from './components/JoinGroupModal';
-import { MealIdeaPrompt } from './components/MealIdeaPrompt';
-import { AIChatWidget } from './components/AIChatWidget';
+import { HeroDishInput } from './components/HeroDishInput';
+import { DishFeed } from './components/DishFeed';
+import { GroupInsights } from './components/GroupInsights';
+import { MembersSection } from './components/MembersSection';
+import { SimpleAISuggestions } from './components/SimpleAISuggestions';
 import { ToastContainer } from './components/Toast';
-import { Loader2, Database } from 'lucide-react';
+import { Loader2, Database, AlertCircle } from 'lucide-react';
 
-const STORAGE_KEY_GROUPS = 'mealplan_persisted_groups_v3';
-
-function sanitizeGroupMembers(groupList: Group[]): Group[] {
-  return groupList.map((g) => ({
-    ...g,
-    creatorName: g.creatorName === 'Rahul' ? 'Maneesh' : g.creatorName,
-    members: g.members.filter(
-      (m) =>
-        !['member-rahul', 'member-priya', 'member-arjun', 'member-ananya'].includes(m.id) &&
-        !['Rahul', 'Priya', 'Arjun', 'Ananya'].includes(m.name)
-    ),
-  })).map((g) => {
-    // If group has no members left after filtering, attach default Maneesh, Jinka, Vishwa
-    if (g.members.length === 0) {
-      return { ...g, creatorName: 'Maneesh', members: sampleGroup.members };
-    }
-    return g;
-  });
-}
+const FALLBACK_STATE: AppState = {
+  group: sampleGroup,
+  members: sampleMembers,
+  dishes: sampleDishes,
+};
 
 export function App() {
-  const [groups, setGroups] = useState<Group[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_GROUPS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = sanitizeGroupMembers(parsed);
-          if (cleaned.length > 0) return cleaned;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return [sampleGroup];
-  });
-  const [activeGroupIdState, setActiveGroupIdState] = useState<string>(sampleGroup.id);
+  const [appState, setAppState] = useState<AppState>(FALLBACK_STATE);
+  const [activeMemberId, setActiveMemberId] = useState<string>('member-maneesh');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  // Sync groups to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(groups));
-    } catch {
-      // ignore
-    }
-  }, [groups]);
+  // Reference for scrolling to members section
+  const membersSectionRef = useRef<HTMLDivElement>(null);
 
-  const [currentTab, setCurrentTab] = useState<NavigationTab | 'landing'>('dashboard');
+  // Toasts
+  const [toasts, setToasts] = useState<ToastType[]>([]);
 
-  // Modals state
-  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
-  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
-  const [isJoinGroupOpen, setIsJoinGroupOpen] = useState(false);
-
-  // Toast state
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const showToast = (message: string, type: Toast['type'] = 'success') => {
+  const showToast = (message: string, type: ToastType['type'] = 'success') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -95,348 +43,212 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Load from PostgreSQL API
-  const loadData = useCallback(async () => {
+  // Load board from PostgreSQL
+  const loadBoard = useCallback(async () => {
     try {
       setIsLoading(true);
-      const fetched = await api.fetchGroups();
-      if (Array.isArray(fetched) && fetched.length > 0) {
-        const cleaned = sanitizeGroupMembers(fetched);
-        setGroups(cleaned);
+      setDbError(null);
+      const data = await api.fetchBoard('group-our-meals');
+      if (data && data.group && Array.isArray(data.members) && Array.isArray(data.dishes)) {
+        setAppState(data);
         setIsDbConnected(true);
-        setActiveGroupIdState((prev) => {
-          if (cleaned.some((g) => g.id === prev)) return prev;
-          return cleaned[0].id;
+
+        // Ensure activeMemberId is valid
+        setActiveMemberId((prev) => {
+          if (data.members.some((m) => m.id === prev)) return prev;
+          return data.members[0]?.id || 'member-maneesh';
         });
       }
-    } catch (err) {
-      console.warn('API error, using local state:', err);
+    } catch (err: any) {
+      console.warn('API error, falling back to local state:', err);
+      setDbError(err.message || 'Connecting to database');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadBoard();
+  }, [loadBoard]);
 
-  const activeGroup =
-    groups.find((g) => g.id === activeGroupIdState) || groups[0] || sampleGroup;
-
-  // Member CRUD with PostgreSQL
-  const handleSaveMember = async (memberData: { name: string; likes: string[]; dislikes: string[] }) => {
+  // Add Dish
+  const handleAddDish = async (name: string, suggestedBy: string, suggestedByMemberId?: string) => {
+    setIsSubmitting(true);
     try {
-      if (editingMember) {
-        // Edit existing member
-        const updatedGroup = await api.updateMember(activeGroup.id, editingMember.id, {
-          name: memberData.name,
-          likes: memberData.likes,
-          dislikes: memberData.dislikes,
-        });
-        setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-        showToast(`Updated preferences for ${memberData.name}`);
-      } else {
-        // Add new member
-        const updatedGroup = await api.addMember(activeGroup.id, {
-          name: memberData.name,
-          likes: memberData.likes,
-          dislikes: memberData.dislikes,
-        });
-        setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-        showToast(`Added ${memberData.name} to the group`);
-      }
+      const updated = await api.addDish({
+        groupId: appState.group.id,
+        name,
+        suggestedBy,
+        suggestedByMemberId,
+      });
+      setAppState(updated);
+      showToast(`Added "${name}" to the board!`);
     } catch (err: any) {
       console.error(err);
       // Fallback local update
-      if (editingMember) {
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.id === activeGroup.id
-              ? {
-                  ...g,
-                  members: g.members.map((m) =>
-                    m.id === editingMember.id ? { ...m, ...memberData } : m
-                  ),
-                }
-              : g
-          )
-        );
-      } else {
-        const newMember: Member = {
-          id: `member-${Date.now()}`,
-          name: memberData.name,
-          likes: memberData.likes,
-          dislikes: memberData.dislikes,
-        };
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.id === activeGroup.id ? { ...g, members: [...g.members, newMember] } : g
-          )
-        );
-      }
-      showToast(`Saved member (${memberData.name})`);
-    }
-    setEditingMember(null);
-  };
-
-  const handleDeleteMember = async (memberId: string) => {
-    const target = activeGroup.members.find((m) => m.id === memberId);
-    if (!target) return;
-    if (window.confirm(`Are you sure you want to remove ${target.name} from this meal plan?`)) {
-      try {
-        const updatedGroup = await api.deleteMember(activeGroup.id, memberId);
-        setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-        showToast(`Removed ${target.name} from group`, 'info');
-      } catch {
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.id === activeGroup.id
-              ? { ...g, members: g.members.filter((m) => m.id !== memberId) }
-              : g
-          )
-        );
-        showToast(`Removed ${target.name}`, 'info');
-      }
-    }
-  };
-
-  const handleEditMemberClick = (member: Member) => {
-    setEditingMember(member);
-    setIsAddMemberOpen(true);
-  };
-
-  const handleAddMemberClick = () => {
-    setEditingMember(null);
-    setIsAddMemberOpen(true);
-  };
-
-  // Direct like/dislike modifications
-  const handleAddLike = async (memberId: string, dish: string) => {
-    const targetMember = activeGroup.members.find((m) => m.id === memberId);
-    if (!targetMember) return;
-    const newLikes = [...targetMember.likes, dish];
-
-    try {
-      const updatedGroup = await api.updateMember(activeGroup.id, memberId, { likes: newLikes });
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-      showToast(`Added ${dish} to likes`);
-    } catch {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === activeGroup.id
-            ? {
-                ...g,
-                members: g.members.map((m) =>
-                  m.id === memberId ? { ...m, likes: newLikes } : m
-                ),
-              }
-            : g
-        )
-      );
-    }
-  };
-
-  const handleRemoveLike = async (memberId: string, dishIndex: number) => {
-    const targetMember = activeGroup.members.find((m) => m.id === memberId);
-    if (!targetMember) return;
-    const newLikes = targetMember.likes.filter((_, idx) => idx !== dishIndex);
-
-    try {
-      const updatedGroup = await api.updateMember(activeGroup.id, memberId, { likes: newLikes });
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-    } catch {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === activeGroup.id
-            ? {
-                ...g,
-                members: g.members.map((m) =>
-                  m.id === memberId ? { ...m, likes: newLikes } : m
-                ),
-              }
-            : g
-        )
-      );
-    }
-  };
-
-  const handleAddDislike = async (memberId: string, dish: string) => {
-    const targetMember = activeGroup.members.find((m) => m.id === memberId);
-    if (!targetMember) return;
-    const newDislikes = [...targetMember.dislikes, dish];
-
-    try {
-      const updatedGroup = await api.updateMember(activeGroup.id, memberId, { dislikes: newDislikes });
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-      showToast(`Added ${dish} to dislikes`, 'info');
-    } catch {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === activeGroup.id
-            ? {
-                ...g,
-                members: g.members.map((m) =>
-                  m.id === memberId ? { ...m, dislikes: newDislikes } : m
-                ),
-              }
-            : g
-        )
-      );
-    }
-  };
-
-  const handleRemoveDislike = async (memberId: string, dishIndex: number) => {
-    const targetMember = activeGroup.members.find((m) => m.id === memberId);
-    if (!targetMember) return;
-    const newDislikes = targetMember.dislikes.filter((_, idx) => idx !== dishIndex);
-
-    try {
-      const updatedGroup = await api.updateMember(activeGroup.id, memberId, { dislikes: newDislikes });
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-    } catch {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === activeGroup.id
-            ? {
-                ...g,
-                members: g.members.map((m) =>
-                  m.id === memberId ? { ...m, dislikes: newDislikes } : m
-                ),
-              }
-            : g
-        )
-      );
-    }
-  };
-
-  // Meal Plan modifications
-  const handleChangeMeal = async (dayKey: DayKey, mealType: keyof MealSlot, value: string) => {
-    const updatedPlan = {
-      ...activeGroup.mealPlan,
-      [dayKey]: {
-        ...activeGroup.mealPlan[dayKey],
-        [mealType]: value,
-      },
-    };
-
-    try {
-      const updatedGroup = await api.updateMealPlan(activeGroup.id, updatedPlan);
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-    } catch {
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === activeGroup.id ? { ...g, mealPlan: updatedPlan } : g
-        )
-      );
-    }
-  };
-
-  const handleClearMealPlan = async () => {
-    if (window.confirm('Clear all scheduled meals from this weekly plan?')) {
-      const emptyPlan = {
-        monday: { breakfast: '', lunch: '', dinner: '' },
-        tuesday: { breakfast: '', lunch: '', dinner: '' },
-        wednesday: { breakfast: '', lunch: '', dinner: '' },
-        thursday: { breakfast: '', lunch: '', dinner: '' },
-        friday: { breakfast: '', lunch: '', dinner: '' },
-        saturday: { breakfast: '', lunch: '', dinner: '' },
-        sunday: { breakfast: '', lunch: '', dinner: '' },
+      const newDish = {
+        id: `dish-${Date.now()}`,
+        groupId: appState.group.id,
+        name,
+        suggestedBy,
+        suggestedByMemberId,
+        createdAt: new Date().toISOString(),
+        likes: suggestedByMemberId ? [suggestedByMemberId] : [],
+        dislikes: [],
       };
+      setAppState((prev) => ({
+        ...prev,
+        dishes: [newDish, ...prev.dishes],
+      }));
+      showToast(`Added "${name}" to the board!`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
+  // Delete Dish
+  const handleDeleteDish = async (dishId: string) => {
+    const dish = appState.dishes.find((d) => d.id === dishId);
+    if (!dish) return;
+
+    if (window.confirm(`Remove "${dish.name}" from the board?`)) {
       try {
-        const updatedGroup = await api.updateMealPlan(activeGroup.id, emptyPlan);
-        setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-        showToast('Weekly meal plan cleared', 'info');
+        const updated = await api.deleteDish(dishId, appState.group.id);
+        setAppState(updated);
+        showToast(`Removed "${dish.name}"`, 'info');
       } catch {
-        setGroups((prev) =>
-          prev.map((g) =>
-            g.id === activeGroup.id ? { ...g, mealPlan: emptyPlan } : g
-          )
-        );
+        setAppState((prev) => ({
+          ...prev,
+          dishes: prev.dishes.filter((d) => d.id !== dishId),
+        }));
+        showToast(`Removed "${dish.name}"`, 'info');
       }
     }
   };
 
-  const [isGeneratingAIPlan, setIsGeneratingAIPlan] = useState<boolean>(false);
-
-  const handleGenerateAIPlan = async () => {
+  // Toggle Like
+  const handleToggleLike = async (dishId: string) => {
     try {
-      setIsGeneratingAIPlan(true);
-      const customKey = localStorage.getItem('mealplan_gemini_custom_api_key') || undefined;
-      const useCustom = localStorage.getItem('mealplan_gemini_use_custom_key') === 'true';
-      const keyToUse = useCustom && customKey ? customKey : undefined;
-
-      showToast('AI Chef is generating a weekly meal plan tailored to your group...', 'info');
-      const newPlan = await api.generateAIMealPlan(activeGroup.members, keyToUse);
-      const updatedGroup = await api.updateMealPlan(activeGroup.id, newPlan);
-      setGroups((prev) => prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g)));
-      showToast('AI generated full 7-day meal plan based on member tastes!', 'success');
-    } catch (err: any) {
-      console.error('AI Meal Plan error:', err);
-      showToast(`AI generation error: ${err.message || 'Failed to generate'}`, 'error');
-    } finally {
-      setIsGeneratingAIPlan(false);
+      const updated = await api.toggleLike(dishId, activeMemberId, appState.group.id);
+      setAppState(updated);
+    } catch {
+      // Local fallback
+      setAppState((prev) => ({
+        ...prev,
+        dishes: prev.dishes.map((d) => {
+          if (d.id !== dishId) return d;
+          const isLiked = d.likes.includes(activeMemberId);
+          return {
+            ...d,
+            likes: isLiked
+              ? d.likes.filter((id) => id !== activeMemberId)
+              : [...d.likes, activeMemberId],
+            dislikes: d.dislikes.filter((id) => id !== activeMemberId),
+          };
+        }),
+      }));
     }
   };
 
-  // Group Management
-  const handleCreateGroup = async (groupName: string, creatorName: string) => {
+  // Toggle Dislike
+  const handleToggleDislike = async (dishId: string) => {
     try {
-      const newGroup = await api.createGroup({
-        name: groupName,
-        creatorName,
-        members: [{ id: `member-${Date.now()}`, name: creatorName, likes: [], dislikes: [] }],
+      const updated = await api.toggleDislike(dishId, activeMemberId, appState.group.id);
+      setAppState(updated);
+    } catch {
+      // Local fallback
+      setAppState((prev) => ({
+        ...prev,
+        dishes: prev.dishes.map((d) => {
+          if (d.id !== dishId) return d;
+          const isDisliked = d.dislikes.includes(activeMemberId);
+          return {
+            ...d,
+            dislikes: isDisliked
+              ? d.dislikes.filter((id) => id !== activeMemberId)
+              : [...d.dislikes, activeMemberId],
+            likes: d.likes.filter((id) => id !== activeMemberId),
+          };
+        }),
+      }));
+    }
+  };
+
+  // Add Member
+  const handleAddMember = async (name: string, avatarColor?: string) => {
+    try {
+      const updated = await api.addMember({
+        groupId: appState.group.id,
+        name,
+        avatarColor,
       });
-      setGroups((prev) => [...prev, newGroup]);
-      setActiveGroupIdState(newGroup.id);
-      setCurrentTab('dashboard');
-      showToast(`Created meal group "${groupName}"`);
-    } catch (err: any) {
-      showToast(`Error creating group: ${err.message}`, 'error');
+      setAppState(updated);
+      showToast(`Welcome ${name} to ${appState.group.name}!`);
+    } catch {
+      const newMember = {
+        id: `member-${Date.now()}`,
+        groupId: appState.group.id,
+        name,
+        avatarColor: avatarColor || 'bg-emerald-700',
+        createdAt: new Date().toISOString(),
+      };
+      setAppState((prev) => ({
+        ...prev,
+        members: [...prev.members, newMember],
+      }));
+      showToast(`Added ${name}!`);
     }
   };
 
-  const handleSelectGroup = (groupId: string) => {
-    setActiveGroupIdState(groupId);
-    setCurrentTab('dashboard');
-    showToast('Switched active group');
+  // Delete Member
+  const handleDeleteMember = async (memberId: string) => {
+    try {
+      const updated = await api.deleteMember(memberId, appState.group.id);
+      setAppState(updated);
+      if (activeMemberId === memberId) {
+        setActiveMemberId(updated.members[0]?.id || '');
+      }
+      showToast('Member removed', 'info');
+    } catch {
+      setAppState((prev) => {
+        const remaining = prev.members.filter((m) => m.id !== memberId);
+        if (activeMemberId === memberId) {
+          setActiveMemberId(remaining[0]?.id || '');
+        }
+        return {
+          ...prev,
+          members: remaining,
+        };
+      });
+      showToast('Member removed', 'info');
+    }
   };
 
-  const handleJoinByCode = async (codeOrName: string) => {
-    const match = groups.find(
-      (g) =>
-        g.name.toLowerCase() === codeOrName.toLowerCase() ||
-        g.id.toLowerCase() === codeOrName.toLowerCase()
-    );
-    if (match) {
-      setActiveGroupIdState(match.id);
-      setCurrentTab('dashboard');
-      showToast(`Joined group: ${match.name}`);
-    } else {
-      await handleCreateGroup(codeOrName, 'You');
-    }
+  const scrollToMembers = () => {
+    membersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
-    <div className="min-h-screen bg-background text-charcoal flex flex-col">
-      {/* Top Navigation */}
+    <div className="min-h-screen bg-background text-charcoal flex flex-col antialiased selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Top Navbar */}
       <Navbar
-        currentTab={currentTab === 'landing' ? 'dashboard' : currentTab}
-        onSelectTab={(tab) => setCurrentTab(tab)}
-        activeGroup={activeGroup}
-        onOpenJoinGroup={() => setIsJoinGroupOpen(true)}
-        onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
+        group={appState.group}
+        members={appState.members}
+        activeMemberId={activeMemberId}
+        onChangeActiveMember={(id) => setActiveMemberId(id)}
+        onOpenMembers={scrollToMembers}
+        isDbConnected={isDbConnected}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* PostgreSQL Database Connected indicator */}
-        <div className="mb-4 flex items-center justify-between text-xs text-charcoal-muted bg-surface/60 border border-border px-3.5 py-1.5 rounded-xl">
+      {/* Main Container */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8 sm:space-y-10">
+        {/* Database Sync Status Banner */}
+        <div className="flex items-center justify-between text-xs bg-surface/70 border border-border px-4 py-2 rounded-2xl shadow-xs">
           <div className="flex items-center gap-2">
-            <Database className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="font-semibold text-charcoal">Database:</span>
+            <Database className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="font-semibold text-charcoal">PostgreSQL Single Source of Truth:</span>
             <span className="text-emerald-700 font-medium">
-              {isDbConnected ? 'Neon PostgreSQL Connected (ep-autumn-poetry)' : 'Connecting to PostgreSQL...'}
+              {isDbConnected ? 'Neon PostgreSQL Connected' : 'Connecting to database...'}
             </span>
           </div>
           {isLoading && (
@@ -445,129 +257,74 @@ export function App() {
               <span>Syncing...</span>
             </div>
           )}
+          {dbError && !isLoading && (
+            <div className="flex items-center gap-1 text-amber-700">
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>Offline cache active</span>
+            </div>
+          )}
         </div>
 
-        {currentTab === 'landing' ? (
-          <HeroLanding
-            onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-            onOpenJoinGroup={() => setIsJoinGroupOpen(true)}
-            onExploreDashboard={() => setCurrentTab('dashboard')}
+        {/* 1. HERO FEATURE: What should we eat? Dish Idea Input */}
+        <HeroDishInput
+          members={appState.members}
+          activeMemberId={activeMemberId}
+          onChangeActiveMember={(id) => setActiveMemberId(id)}
+          onAddDish={handleAddDish}
+          isSubmitting={isSubmitting}
+        />
+
+        {/* 2. DISH IDEAS FEED */}
+        <DishFeed
+          dishes={appState.dishes}
+          members={appState.members}
+          activeMemberId={activeMemberId}
+          onToggleLike={handleToggleLike}
+          onToggleDislike={handleToggleDislike}
+          onDeleteDish={handleDeleteDish}
+        />
+
+        {/* 3. GROUP INSIGHTS (Most Liked, Popular Ideas, Disliked Dishes) */}
+        <GroupInsights
+          dishes={appState.dishes}
+          members={appState.members}
+        />
+
+        {/* 4. MEMBERS SECTION */}
+        <div ref={membersSectionRef}>
+          <MembersSection
+            members={appState.members}
+            dishes={appState.dishes}
+            activeMemberId={activeMemberId}
+            onSelectMember={(id) => setActiveMemberId(id)}
+            onAddMember={handleAddMember}
+            onDeleteMember={handleDeleteMember}
           />
-        ) : (
-          <div className="space-y-8">
-            {/* Main Option: Type your idea for lunch, dinner, curries, or cravings */}
-            <MealIdeaPrompt
-              activeGroup={activeGroup}
-              onUpdateMealPlan={handleChangeMeal}
-              onAddLike={handleAddLike}
-              showToast={showToast}
-            />
+        </div>
 
-            {/* Dashboard Greeting & Quick Stats */}
-            <DashboardHeader
-              group={activeGroup}
-              onOpenAddMember={handleAddMemberClick}
-              onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-            />
-
-            {/* Dashboard All-in-One View */}
-            {currentTab === 'dashboard' && (
-              <>
-                {/* Collective Preference Summary */}
-                <PreferenceSummary members={activeGroup.members} />
-
-                {/* Member Preference Cards Grid */}
-                <MemberList
-                  members={activeGroup.members}
-                  onOpenAddMember={handleAddMemberClick}
-                  onEditMember={handleEditMemberClick}
-                  onDeleteMember={handleDeleteMember}
-                  onAddLike={handleAddLike}
-                  onRemoveLike={handleRemoveLike}
-                  onAddDislike={handleAddDislike}
-                  onRemoveDislike={handleRemoveDislike}
-                />
-
-                {/* Weekly Meal Plan */}
-                <WeeklyMealPlan
-                  mealPlan={activeGroup.mealPlan}
-                  members={activeGroup.members}
-                  onChangeMeal={handleChangeMeal}
-                  onClearPlan={handleClearMealPlan}
-                  onGenerateAIPlan={handleGenerateAIPlan}
-                  isGeneratingAIPlan={isGeneratingAIPlan}
-                />
-              </>
-            )}
-
-            {/* Tab: Members View Only */}
-            {currentTab === 'members' && (
-              <MemberList
-                members={activeGroup.members}
-                onOpenAddMember={handleAddMemberClick}
-                onEditMember={handleEditMemberClick}
-                onDeleteMember={handleDeleteMember}
-                onAddLike={handleAddLike}
-                onRemoveLike={handleRemoveLike}
-                onAddDislike={handleAddDislike}
-                onRemoveDislike={handleRemoveDislike}
-              />
-            )}
-
-            {/* Tab: Meal Plan View Only */}
-            {currentTab === 'mealplan' && (
-              <WeeklyMealPlan
-                mealPlan={activeGroup.mealPlan}
-                members={activeGroup.members}
-                onChangeMeal={handleChangeMeal}
-                onClearPlan={handleClearMealPlan}
-                onGenerateAIPlan={handleGenerateAIPlan}
-                isGeneratingAIPlan={isGeneratingAIPlan}
-              />
-            )}
-
-            {/* Tab: Preferences / Summary View Only */}
-            {currentTab === 'summary' && (
-              <PreferenceSummary members={activeGroup.members} />
-            )}
-          </div>
-        )}
+        {/* 5. SIMPLE AI HELPER (Need an idea?) */}
+        <SimpleAISuggestions
+          dishes={appState.dishes}
+          members={appState.members}
+          activeMemberId={activeMemberId}
+          onAddDish={handleAddDish}
+          showToast={showToast}
+        />
       </main>
 
-      {/* Modals */}
-      <AddMemberModal
-        isOpen={isAddMemberOpen}
-        editingMember={editingMember}
-        onClose={() => {
-          setIsAddMemberOpen(false);
-          setEditingMember(null);
-        }}
-        onSave={handleSaveMember}
-      />
+      {/* Minimal Footer */}
+      <footer className="border-t border-border mt-12 py-6 text-center text-xs text-charcoal-muted">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="font-semibold text-charcoal">
+            MealTogether &mdash; Simple Collaborative Food Ideas Board
+          </p>
+          <p>
+            Powered by Neon PostgreSQL &bull; Maneesh, Jinka, Vishwa
+          </p>
+        </div>
+      </footer>
 
-      <CreateGroupModal
-        isOpen={isCreateGroupOpen}
-        onClose={() => setIsCreateGroupOpen(false)}
-        onCreateGroup={handleCreateGroup}
-      />
-
-      <JoinGroupModal
-        isOpen={isJoinGroupOpen}
-        existingGroups={groups}
-        activeGroupId={activeGroup.id}
-        onClose={() => setIsJoinGroupOpen(false)}
-        onSelectGroup={handleSelectGroup}
-        onJoinByCode={handleJoinByCode}
-      />
-
-      {/* Floating AI Chat Widget at bottom right */}
-      <AIChatWidget
-        activeGroup={activeGroup}
-        onUpdateMealPlan={handleChangeMeal}
-        showToast={showToast}
-      />
-
-      {/* Toast Notifications */}
+      {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
     </div>
   );

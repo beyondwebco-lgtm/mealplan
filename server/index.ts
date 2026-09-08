@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { pool, initDb } from './db';
-import { generateAIMealPlan, generateAIRecipe, generateAIChat, validateGeminiKey, generateMealIdeas } from './ai';
+import { suggestDishIdeas } from './ai';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,248 +9,277 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Helper to format group rows + member rows into Group objects
-async function getFullGroup(groupId: string) {
-  const groupRes = await pool.query('SELECT * FROM groups WHERE id = $1', [groupId]);
-  if (groupRes.rows.length === 0) return null;
+// Helper to fetch full board state for a group
+async function getFullBoard(groupId: string = 'group-our-meals') {
+  // 1. Get Group
+  let groupRes = await pool.query('SELECT * FROM groups WHERE id = $1', [groupId]);
+  if (groupRes.rows.length === 0) {
+    // Default group fallback
+    groupRes = await pool.query('SELECT * FROM groups LIMIT 1');
+  }
+  const groupRow = groupRes.rows[0];
+  if (!groupRow) return null;
+  const activeGroupId = groupRow.id;
 
-  const g = groupRes.rows[0];
+  // 2. Get Members
   const membersRes = await pool.query(
     'SELECT * FROM members WHERE group_id = $1 ORDER BY created_at ASC',
-    [groupId]
+    [activeGroupId]
   );
 
+  // 3. Get Dishes
+  const dishesRes = await pool.query(
+    'SELECT * FROM dishes WHERE group_id = $1 ORDER BY created_at DESC',
+    [activeGroupId]
+  );
+
+  // 4. Get Likes & Dislikes for this group's dishes
+  const likesRes = await pool.query(
+    `SELECT l.dish_id, l.member_id 
+     FROM likes l 
+     JOIN dishes d ON l.dish_id = d.id 
+     WHERE d.group_id = $1`,
+    [activeGroupId]
+  );
+
+  const dislikesRes = await pool.query(
+    `SELECT dl.dish_id, dl.member_id 
+     FROM dislikes dl 
+     JOIN dishes d ON dl.dish_id = d.id 
+     WHERE d.group_id = $1`,
+    [activeGroupId]
+  );
+
+  const likesMap: Record<string, string[]> = {};
+  for (const row of likesRes.rows) {
+    if (!likesMap[row.dish_id]) likesMap[row.dish_id] = [];
+    likesMap[row.dish_id].push(row.member_id);
+  }
+
+  const dislikesMap: Record<string, string[]> = {};
+  for (const row of dislikesRes.rows) {
+    if (!dislikesMap[row.dish_id]) dislikesMap[row.dish_id] = [];
+    dislikesMap[row.dish_id].push(row.member_id);
+  }
+
   return {
-    id: g.id,
-    name: g.name,
-    creatorName: g.creator_name,
-    mealPlan: g.meal_plan,
-    createdAt: g.created_at,
-    updatedAt: g.updated_at,
+    group: {
+      id: groupRow.id,
+      name: groupRow.name,
+      createdAt: groupRow.created_at,
+    },
     members: membersRes.rows.map((m) => ({
       id: m.id,
+      groupId: m.group_id,
       name: m.name,
       avatarColor: m.avatar_color,
-      likes: typeof m.likes === 'string' ? JSON.parse(m.likes) : m.likes || [],
-      dislikes: typeof m.dislikes === 'string' ? JSON.parse(m.dislikes) : m.dislikes || [],
+      createdAt: m.created_at,
+    })),
+    dishes: dishesRes.rows.map((d) => ({
+      id: d.id,
+      groupId: d.group_id,
+      name: d.name,
+      suggestedBy: d.suggested_by,
+      suggestedByMemberId: d.suggested_by_member_id,
+      createdAt: d.created_at,
+      likes: likesMap[d.id] || [],
+      dislikes: dislikesMap[d.id] || [],
     })),
   };
 }
 
-// GET all groups with their members
-app.get('/api/groups', async (_req, res) => {
+// GET full board (group, members, dishes with likes & dislikes)
+app.get('/api/board', async (req, res) => {
   try {
-    const groupsRes = await pool.query('SELECT * FROM groups ORDER BY created_at ASC');
-    const groups = [];
+    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const board = await getFullBoard(groupId);
+    if (!board) return res.status(404).json({ error: 'Board not found' });
+    res.json(board);
+  } catch (err: any) {
+    console.error('Error fetching board:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    for (const g of groupsRes.rows) {
-      const fullGroup = await getFullGroup(g.id);
-      if (fullGroup) groups.push(fullGroup);
+// POST add dish idea
+app.post('/api/dishes', async (req, res) => {
+  try {
+    const { groupId = 'group-our-meals', name, suggestedBy, suggestedByMemberId } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Dish name is required' });
     }
 
-    res.json(groups);
-  } catch (err: any) {
-    console.error('Error fetching groups:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET single group
-app.get('/api/groups/:id', async (req, res) => {
-  try {
-    const group = await getFullGroup(req.params.id);
-    if (!group) return res.status(404).json({ error: 'Group not found' });
-    res.json(group);
-  } catch (err: any) {
-    console.error('Error fetching group:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST create group
-app.post('/api/groups', async (req, res) => {
-  try {
-    const { id, name, creatorName, members, mealPlan } = req.body;
-    const groupId = id || `group-${Date.now()}`;
+    const dishId = `dish-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const trimmedName = name.trim();
 
     await pool.query(
-      `INSERT INTO groups (id, name, creator_name, meal_plan) VALUES ($1, $2, $3, $4)`,
-      [groupId, name, creatorName, JSON.stringify(mealPlan || {})]
+      `INSERT INTO dishes (id, group_id, name, suggested_by, suggested_by_member_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [dishId, groupId, trimmedName, suggestedBy || 'Anonymous', suggestedByMemberId || null]
     );
 
-    if (Array.isArray(members)) {
-      for (const m of members) {
-        const memberId = m.id || `member-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        await pool.query(
-          `INSERT INTO members (id, group_id, name, avatar_color, likes, dislikes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [memberId, groupId, m.name, m.avatarColor || null, JSON.stringify(m.likes || []), JSON.stringify(m.dislikes || [])]
-        );
-      }
+    // If suggestedByMemberId provided, auto-like the dish they suggested
+    if (suggestedByMemberId) {
+      const likeId = `like-${suggestedByMemberId}-${dishId}`;
+      await pool.query(
+        `INSERT INTO likes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [likeId, suggestedByMemberId, dishId]
+      );
     }
 
-    const created = await getFullGroup(groupId);
-    res.status(201).json(created);
+    const board = await getFullBoard(groupId);
+    res.status(201).json(board);
   } catch (err: any) {
-    console.error('Error creating group:', err);
+    console.error('Error creating dish:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST add member to group
-app.post('/api/groups/:id/members', async (req, res) => {
+// DELETE dish idea
+app.delete('/api/dishes/:id', async (req, res) => {
   try {
-    const groupId = req.params.id;
-    const { id, name, avatarColor, likes, dislikes } = req.body;
-    const memberId = id || `member-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const dishId = req.params.id;
+    const groupId = (req.query.groupId as string) || 'group-our-meals';
 
-    await pool.query(
-      `INSERT INTO members (id, group_id, name, avatar_color, likes, dislikes)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [memberId, groupId, name, avatarColor || null, JSON.stringify(likes || []), JSON.stringify(dislikes || [])]
+    await pool.query('DELETE FROM dishes WHERE id = $1', [dishId]);
+
+    const board = await getFullBoard(groupId);
+    res.json(board);
+  } catch (err: any) {
+    console.error('Error deleting dish:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST toggle Like on a dish
+app.post('/api/dishes/:id/like', async (req, res) => {
+  try {
+    const dishId = req.params.id;
+    const { memberId, groupId = 'group-our-meals' } = req.body;
+
+    if (!memberId) return res.status(400).json({ error: 'memberId is required' });
+
+    // Check if like currently exists
+    const existingLike = await pool.query(
+      'SELECT id FROM likes WHERE member_id = $1 AND dish_id = $2',
+      [memberId, dishId]
     );
 
-    await pool.query('UPDATE groups SET updated_at = NOW() WHERE id = $1', [groupId]);
+    if (existingLike.rows.length > 0) {
+      // Toggle off Like
+      await pool.query('DELETE FROM likes WHERE member_id = $1 AND dish_id = $2', [memberId, dishId]);
+    } else {
+      // Remove any dislike first
+      await pool.query('DELETE FROM dislikes WHERE member_id = $1 AND dish_id = $2', [memberId, dishId]);
+      // Add Like
+      const likeId = `like-${memberId}-${dishId}`;
+      await pool.query(
+        'INSERT INTO likes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [likeId, memberId, dishId]
+      );
+    }
 
-    const updatedGroup = await getFullGroup(groupId);
-    res.status(201).json(updatedGroup);
+    const board = await getFullBoard(groupId);
+    res.json(board);
+  } catch (err: any) {
+    console.error('Error toggling like:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST toggle Dislike on a dish
+app.post('/api/dishes/:id/dislike', async (req, res) => {
+  try {
+    const dishId = req.params.id;
+    const { memberId, groupId = 'group-our-meals' } = req.body;
+
+    if (!memberId) return res.status(400).json({ error: 'memberId is required' });
+
+    // Check if dislike currently exists
+    const existingDislike = await pool.query(
+      'SELECT id FROM dislikes WHERE member_id = $1 AND dish_id = $2',
+      [memberId, dishId]
+    );
+
+    if (existingDislike.rows.length > 0) {
+      // Toggle off Dislike
+      await pool.query('DELETE FROM dislikes WHERE member_id = $1 AND dish_id = $2', [memberId, dishId]);
+    } else {
+      // Remove any like first
+      await pool.query('DELETE FROM likes WHERE member_id = $1 AND dish_id = $2', [memberId, dishId]);
+      // Add Dislike
+      const dislikeId = `dislike-${memberId}-${dishId}`;
+      await pool.query(
+        'INSERT INTO dislikes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [dislikeId, memberId, dishId]
+      );
+    }
+
+    const board = await getFullBoard(groupId);
+    res.json(board);
+  } catch (err: any) {
+    console.error('Error toggling dislike:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST add new member
+app.post('/api/members', async (req, res) => {
+  try {
+    const { groupId = 'group-our-meals', name, avatarColor } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Member name is required' });
+
+    const memberId = `member-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    await pool.query(
+      `INSERT INTO members (id, group_id, name, avatar_color) VALUES ($1, $2, $3, $4)`,
+      [memberId, groupId, name.trim(), avatarColor || 'bg-emerald-700']
+    );
+
+    const board = await getFullBoard(groupId);
+    res.status(201).json(board);
   } catch (err: any) {
     console.error('Error adding member:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update member
-app.put('/api/groups/:id/members/:memberId', async (req, res) => {
-  try {
-    const { id: groupId, memberId } = req.params;
-    const { name, likes, dislikes } = req.body;
-
-    await pool.query(
-      `UPDATE members
-       SET name = COALESCE($1, name),
-           likes = COALESCE($2, likes),
-           dislikes = COALESCE($3, dislikes)
-       WHERE id = $4 AND group_id = $5`,
-      [name, JSON.stringify(likes), JSON.stringify(dislikes), memberId, groupId]
-    );
-
-    await pool.query('UPDATE groups SET updated_at = NOW() WHERE id = $1', [groupId]);
-
-    const updatedGroup = await getFullGroup(groupId);
-    res.json(updatedGroup);
-  } catch (err: any) {
-    console.error('Error updating member:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // DELETE member
-app.delete('/api/groups/:id/members/:memberId', async (req, res) => {
+app.delete('/api/members/:id', async (req, res) => {
   try {
-    const { id: groupId, memberId } = req.params;
+    const memberId = req.params.id;
+    const groupId = (req.query.groupId as string) || 'group-our-meals';
 
-    await pool.query('DELETE FROM members WHERE id = $1 AND group_id = $2', [memberId, groupId]);
-    await pool.query('UPDATE groups SET updated_at = NOW() WHERE id = $1', [groupId]);
+    await pool.query('DELETE FROM members WHERE id = $1', [memberId]);
 
-    const updatedGroup = await getFullGroup(groupId);
-    res.json(updatedGroup);
+    const board = await getFullBoard(groupId);
+    res.json(board);
   } catch (err: any) {
     console.error('Error deleting member:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT update meal plan
-app.put('/api/groups/:id/mealplan', async (req, res) => {
+// POST simple AI suggestion helper
+app.post('/api/ai/suggest', async (req, res) => {
   try {
-    const groupId = req.params.id;
-    const { mealPlan } = req.body;
-
-    await pool.query(
-      `UPDATE groups SET meal_plan = $1, updated_at = NOW() WHERE id = $2`,
-      [JSON.stringify(mealPlan), groupId]
+    const { prompt, context, apiKey } = req.body;
+    const suggestions = await suggestDishIdeas(
+      prompt || 'Suggest 4-5 dish ideas',
+      context || { existingDishes: [], popularLikes: [], dislikedDishes: [], members: [] },
+      apiKey
     );
-
-    const updatedGroup = await getFullGroup(groupId);
-    res.json(updatedGroup);
+    res.json({ success: true, suggestions });
   } catch (err: any) {
-    console.error('Error updating meal plan:', err);
-    res.status(500).json({ error: err.message });
+    console.error('AI suggestion error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate dish suggestions' });
   }
 });
 
-// POST Gemini AI generate weekly meal plan
-app.post('/api/ai/generate-meal-plan', async (req, res) => {
-  try {
-    const { members, style } = req.body;
-    const plan = await generateAIMealPlan(members || [], style);
-    res.json({ success: true, mealPlan: plan });
-  } catch (err: any) {
-    console.error('AI Meal Plan generation error:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate meal plan with Gemini AI' });
-  }
-});
-
-// POST Gemini AI recipe guide
-app.post('/api/ai/recipe', async (req, res) => {
-  try {
-    const { dish, apiKey } = req.body;
-    if (!dish) return res.status(400).json({ error: 'Dish name is required' });
-    const recipe = await generateAIRecipe(dish, apiKey);
-    res.json({ success: true, recipe });
-  } catch (err: any) {
-    console.error('AI Recipe generation error:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate recipe with Gemini AI' });
-  }
-});
-
-// POST Gemini AI interactive chat
-app.post('/api/ai/chat', async (req, res) => {
-  try {
-    const { messages, groupContext, apiKey } = req.body;
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Messages array is required' });
-    }
-    const reply = await generateAIChat(messages, groupContext, apiKey);
-    res.json({ success: true, reply });
-  } catch (err: any) {
-    console.error('AI Chat generation error:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate chat response' });
-  }
-});
-
-// POST Gemini AI validate API key
-app.post('/api/ai/validate-key', async (req, res) => {
-  try {
-    const { apiKey } = req.body;
-    if (!apiKey) return res.status(400).json({ error: 'API key is required' });
-    const result = await validateGeminiKey(apiKey);
-    res.json(result);
-  } catch (err: any) {
-    console.error('AI Key validation error:', err);
-    res.status(500).json({ valid: false, error: err.message });
-  }
-});
-
-// POST Gemini AI suggest meal ideas based on freeform prompt
-app.post('/api/ai/suggest-ideas', async (req, res) => {
-  try {
-    const { query, members, apiKey } = req.body;
-    if (!query) return res.status(400).json({ error: 'Query is required' });
-    const ideas = await generateMealIdeas(query, members || [], apiKey);
-    res.json({ success: true, ideas });
-  } catch (err: any) {
-    console.error('AI Meal Ideas error:', err);
-    res.status(500).json({ error: err.message || 'Failed to generate meal ideas' });
-  }
-});
-
-// Start server after DB init
+// Start Express server after DB init
 initDb()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`🚀 Server running with Gemini AI & PostgreSQL on http://localhost:${PORT}`);
+      console.log(`🚀 MealTogether server running on http://localhost:${PORT}`);
     });
   })
   .catch((err) => {

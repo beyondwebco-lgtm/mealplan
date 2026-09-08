@@ -1,6 +1,8 @@
 import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import dotenv from 'dotenv';
 import path from 'path';
+import * as schema from './schema';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -17,18 +19,17 @@ export const pool = new Pool({
   },
 });
 
+export const db = drizzle(pool, { schema });
+
 export async function initDb() {
   const client = await pool.connect();
   try {
-    // Create tables
+    // 1. Create tables
     await client.query(`
       CREATE TABLE IF NOT EXISTS groups (
         id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
-        creator_name VARCHAR(255) NOT NULL,
-        meal_plan JSONB NOT NULL DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS members (
@@ -36,71 +37,167 @@ export async function initDb() {
         group_id VARCHAR(255) NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         avatar_color VARCHAR(100),
-        likes JSONB NOT NULL DEFAULT '[]'::jsonb,
-        dislikes JSONB NOT NULL DEFAULT '[]'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS dishes (
+        id VARCHAR(255) PRIMARY KEY,
+        group_id VARCHAR(255) NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        suggested_by VARCHAR(255) NOT NULL,
+        suggested_by_member_id VARCHAR(255),
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS likes (
+        id VARCHAR(255) PRIMARY KEY,
+        member_id VARCHAR(255) NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+        dish_id VARCHAR(255) NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT likes_member_dish_unique UNIQUE (member_id, dish_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS dislikes (
+        id VARCHAR(255) PRIMARY KEY,
+        member_id VARCHAR(255) NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+        dish_id VARCHAR(255) NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        CONSTRAINT dislikes_member_dish_unique UNIQUE (member_id, dish_id)
       );
 
       CREATE INDEX IF NOT EXISTS idx_members_group_id ON members(group_id);
+      CREATE INDEX IF NOT EXISTS idx_dishes_group_id ON dishes(group_id);
+      CREATE INDEX IF NOT EXISTS idx_likes_dish_id ON likes(dish_id);
+      CREATE INDEX IF NOT EXISTS idx_dislikes_dish_id ON dislikes(dish_id);
     `);
 
-    // Seed sample group if empty
-    // Clean up any old obsolete sample members from database
-    await client.query(`DELETE FROM members WHERE id IN ('member-rahul', 'member-priya', 'member-arjun', 'member-ananya') OR name IN ('Rahul', 'Priya', 'Arjun', 'Ananya')`);
-    await client.query(`UPDATE groups SET creator_name = 'Maneesh' WHERE creator_name = 'Rahul'`);
+    // 2. Clean obsolete names from old prototype
+    await client.query(`
+      DELETE FROM members 
+      WHERE id IN ('member-rahul', 'member-priya', 'member-arjun', 'member-ananya') 
+         OR name IN ('Rahul', 'Priya', 'Arjun', 'Ananya')
+    `);
 
-    const checkRes = await client.query('SELECT COUNT(*) FROM groups');
-    const count = parseInt(checkRes.rows[0].count, 10);
+    // 3. Check and seed default group "Our Group"
+    const groupCheck = await client.query('SELECT COUNT(*) FROM groups WHERE id = $1', ['group-our-meals']);
+    const count = parseInt(groupCheck.rows[0].count, 10);
+
     if (count === 0) {
-      console.log('Seeding initial sample data into PostgreSQL...');
-      const sampleGroupId = 'group-our-weekly-meals';
-      const sampleMealPlan = {
-        monday: { breakfast: 'Idli & Sambar', lunch: 'Dal Tadka + Rice', dinner: 'Paneer Butter Masala + Roti' },
-        tuesday: { breakfast: 'Poha', lunch: 'Aloo Curry + Chapati', dinner: 'Dal Tadka + Jeera Rice' },
-        wednesday: { breakfast: 'Upma', lunch: 'Vegetable Biryani + Raita', dinner: 'Paneer Butter Masala + Phulka' },
-        thursday: { breakfast: 'Dosa with Chutney', lunch: 'Dal Tadka + Steamed Rice', dinner: 'Chicken Curry / Paneer + Roti' },
-        friday: { breakfast: 'Paratha with Curd', lunch: 'Aloo Curry + Rice', dinner: 'Vegetable Biryani' },
-        saturday: { breakfast: 'Puri Bhaji', lunch: 'Paneer Butter Masala + Naan', dinner: 'Dal Tadka + Roti' },
-        sunday: { breakfast: 'Masala Omelette / Paneer Toast', lunch: 'Special Dum Biryani + Salan', dinner: 'Light Khichdi & Papad' },
-      };
+      console.log('Seeding initial MealTogether data into PostgreSQL...');
+      const groupId = 'group-our-meals';
 
       await client.query(
-        `INSERT INTO groups (id, name, creator_name, meal_plan) VALUES ($1, $2, $3, $4)`,
-        [sampleGroupId, 'Our Weekly Meals', 'Maneesh', JSON.stringify(sampleMealPlan)]
+        `INSERT INTO groups (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+        [groupId, 'Our Group']
       );
 
-      const sampleMembers = [
+      // Members
+      const initialMembers = [
+        { id: 'member-maneesh', name: 'Maneesh', avatarColor: 'bg-emerald-700' },
+        { id: 'member-jinka', name: 'Jinka', avatarColor: 'bg-teal-700' },
+        { id: 'member-vishwa', name: 'Vishwa', avatarColor: 'bg-amber-700' },
+      ];
+
+      for (const m of initialMembers) {
+        await client.query(
+          `INSERT INTO members (id, group_id, name, avatar_color) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+          [m.id, groupId, m.name, m.avatarColor]
+        );
+      }
+
+      // Dishes
+      const initialDishes = [
         {
-          id: 'member-maneesh',
-          name: 'Maneesh',
-          avatarColor: 'bg-emerald-700',
-          likes: ['Paneer Butter Masala', 'Dal Tadka', 'Vegetable Biryani', 'Roti'],
-          dislikes: ['Bitter Gourd Curry'],
+          id: 'dish-1',
+          name: 'Paneer Butter Masala',
+          suggestedBy: 'Maneesh',
+          suggestedByMemberId: 'member-maneesh',
+          likes: ['member-maneesh', 'member-jinka', 'member-vishwa'],
+          dislikes: [],
         },
         {
-          id: 'member-jinka',
-          name: 'Jinka',
-          avatarColor: 'bg-teal-700',
-          likes: ['Dal Tadka', 'Paneer Butter Masala', 'Chapati', 'Aloo Curry'],
-          dislikes: ['Fish Curry'],
+          id: 'dish-2',
+          name: 'Dosa',
+          suggestedBy: 'Vishwa',
+          suggestedByMemberId: 'member-vishwa',
+          likes: ['member-vishwa', 'member-maneesh', 'member-jinka'],
+          dislikes: [],
         },
         {
-          id: 'member-vishwa',
-          name: 'Vishwa',
-          avatarColor: 'bg-amber-700',
-          likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka', 'Dosa with Chutney'],
-          dislikes: ['Brinjal Curry'],
+          id: 'dish-3',
+          name: 'Dal Tadka',
+          suggestedBy: 'Vishwa',
+          suggestedByMemberId: 'member-vishwa',
+          likes: ['member-vishwa', 'member-maneesh', 'member-jinka'],
+          dislikes: [],
+        },
+        {
+          id: 'dish-4',
+          name: 'Idli',
+          suggestedBy: 'Maneesh',
+          suggestedByMemberId: 'member-maneesh',
+          likes: ['member-maneesh', 'member-jinka'],
+          dislikes: [],
+        },
+        {
+          id: 'dish-5',
+          name: 'Vegetable Biryani',
+          suggestedBy: 'Jinka',
+          suggestedByMemberId: 'member-jinka',
+          likes: ['member-jinka', 'member-maneesh'],
+          dislikes: [],
+        },
+        {
+          id: 'dish-6',
+          name: 'Upma',
+          suggestedBy: 'Maneesh',
+          suggestedByMemberId: 'member-maneesh',
+          likes: ['member-maneesh'],
+          dislikes: [],
+        },
+        {
+          id: 'dish-7',
+          name: 'Bitter Gourd Curry',
+          suggestedBy: 'Jinka',
+          suggestedByMemberId: 'member-jinka',
+          likes: [],
+          dislikes: ['member-maneesh'],
+        },
+        {
+          id: 'dish-8',
+          name: 'Brinjal Curry',
+          suggestedBy: 'Maneesh',
+          suggestedByMemberId: 'member-maneesh',
+          likes: [],
+          dislikes: ['member-vishwa', 'member-maneesh'],
         },
       ];
 
-      for (const m of sampleMembers) {
-        await pool.query(
-          `INSERT INTO members (id, group_id, name, avatar_color, likes, dislikes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [m.id, sampleGroupId, m.name, m.avatarColor, JSON.stringify(m.likes), JSON.stringify(m.dislikes)]
+      for (const d of initialDishes) {
+        await client.query(
+          `INSERT INTO dishes (id, group_id, name, suggested_by, suggested_by_member_id)
+           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
+          [d.id, groupId, d.name, d.suggestedBy, d.suggestedByMemberId]
         );
+
+        for (const likerId of d.likes) {
+          const likeId = `like-${likerId}-${d.id}`;
+          await client.query(
+            `INSERT INTO likes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [likeId, likerId, d.id]
+          );
+        }
+
+        for (const dislikerId of d.dislikes) {
+          const dislikeId = `dislike-${dislikerId}-${d.id}`;
+          await client.query(
+            `INSERT INTO dislikes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [dislikeId, dislikerId, d.id]
+          );
+        }
       }
-      console.log('Seeded database successfully with Maneesh, Jinka, Vishwa!');
+
+      console.log('Seeded MealTogether successfully with Maneesh, Jinka, Vishwa and sample dishes!');
     }
   } catch (err) {
     console.error('Database initialization error:', err);
