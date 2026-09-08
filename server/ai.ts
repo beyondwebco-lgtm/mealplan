@@ -1,3 +1,6 @@
+/**
+ * Google Gemini AI Integration for Meal Planning, Recipe Generation, and Chat
+ */
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
