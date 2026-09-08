@@ -1,20 +1,18 @@
 import React from 'react';
 import type { Group } from '../types';
-import { Users, Heart, ThumbsDown, Sparkles, Plus, PlusCircle, RotateCcw } from 'lucide-react';
+import { Users, Heart, ThumbsDown, Sparkles, Plus, PlusCircle } from 'lucide-react';
 import { calculateMostLiked } from '../utils/preferenceCalculations';
 
 interface DashboardHeaderProps {
   group: Group;
   onOpenAddMember: () => void;
   onOpenCreateGroup: () => void;
-  onResetData: () => void;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   group,
   onOpenAddMember,
   onOpenCreateGroup,
-  onResetData,
 }) => {
   const hour = new Date().getHours();
   const timeGreeting =
@@ -63,15 +61,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           >
             <PlusCircle className="w-4 h-4" />
             <span>New Group</span>
-          </button>
-          <button
-            type="button"
-            onClick={onResetData}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-charcoal-muted hover:text-charcoal hover:bg-border-light text-xs font-medium rounded-xl transition-colors"
-            title="Reset to initial sample demo data"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset Demo</span>
           </button>
         </div>
       </div>

@@ -372,20 +372,6 @@ export function App() {
     }
   };
 
-  const handleResetDemoData = async () => {
-    if (window.confirm('Reset database to the initial sample demo data (Rahul, Priya, Arjun, Ananya)?')) {
-      try {
-        const demo = await api.resetDemo();
-        setGroups([demo]);
-        setActiveGroupIdState(demo.id);
-        setCurrentTab('dashboard');
-        showToast('Reset PostgreSQL database to demo data', 'info');
-      } catch (err: any) {
-        showToast(`Failed to reset: ${err.message}`, 'error');
-      }
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background text-charcoal flex flex-col">
       {/* Top Navigation */}
@@ -429,7 +415,6 @@ export function App() {
               group={activeGroup}
               onOpenAddMember={handleAddMemberClick}
               onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
-              onResetData={handleResetDemoData}
             />
 
             {/* Dashboard All-in-One View */}

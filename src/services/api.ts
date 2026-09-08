@@ -63,15 +63,6 @@ export const api = {
     return res.json();
   },
 
-  async resetDemo(): Promise<Group> {
-    const res = await fetch(`${API_BASE}/reset-demo`, {
-      method: 'POST',
-    });
-    if (!res.ok) throw new Error('Failed to reset demo');
-    const data = await res.json();
-    return data.group;
-  },
-
   async sendAIChat(
     messages: { role: 'user' | 'assistant' | 'system'; content: string }[],
     groupContext?: {
@@ -81,30 +72,113 @@ export const api = {
     },
     apiKey?: string
   ): Promise<string> {
-    const res = await fetch(`${API_BASE}/ai/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, groupContext, apiKey }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to get response from AI');
+    try {
+      const res = await fetch(`${API_BASE}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, groupContext, apiKey }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server responded with status ${res.status}`);
+      }
+      const data = await res.json();
+      return data.reply;
+    } catch (serverErr: any) {
+      // Fallback: If custom API key is available, run direct client-side Gemini call
+      if (apiKey && apiKey.trim().length > 0) {
+        try {
+          const { GoogleGenAI } = await import('@google/genai');
+          const client = new GoogleGenAI({ apiKey: apiKey.trim() });
+
+          let contextDescription = '';
+          if (groupContext) {
+            const { groupName, members, mealPlan } = groupContext;
+            contextDescription = `
+GROUP CONTEXT:
+- Group Name: ${groupName || 'Meal Group'}
+- Members & Preferences:
+${
+  members && members.length > 0
+    ? members
+        .map(
+          (m) =>
+            `  * ${m.name}:
+      Likes: ${m.likes && m.likes.length ? m.likes.join(', ') : 'Open to anything'}
+      Dislikes/Avoid: ${m.dislikes && m.dislikes.length ? m.dislikes.join(', ') : 'None'}`
+        )
+        .join('\n')
+    : '  No members listed yet.'
+}
+
+CURRENT WEEKLY MEAL PLAN:
+${
+  mealPlan
+    ? Object.entries(mealPlan)
+        .map(
+          ([day, meals]: [string, any]) =>
+            `  * ${day.toUpperCase()}: Breakfast: "${meals?.breakfast || 'Not set'}", Lunch: "${meals?.lunch || 'Not set'}", Dinner: "${meals?.dinner || 'Not set'}"`
+        )
+        .join('\n')
+    : '  No current plan set.'
+}
+`;
+          }
+
+          const systemInstruction = `You are "Chef Gemini", an expert culinary advisor and meal planner.
+${contextDescription}
+GUIDELINES:
+1. Strictly respect member dislikes.
+2. Prioritize group favorites.
+3. Be concise and helpful with markdown format.
+`;
+
+          const conversationTranscript = messages
+            .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+            .join('\n\n');
+
+          const response = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `${systemInstruction}\n\nCONVERSATION HISTORY:\n${conversationTranscript}\n\nAssistant:`,
+          });
+          if (response.text) return response.text;
+        } catch (clientErr: any) {
+          throw new Error(clientErr.message || serverErr.message);
+        }
+      }
+      throw serverErr;
     }
-    const data = await res.json();
-    return data.reply;
   },
 
   async validateAIKey(apiKey: string): Promise<{ valid: boolean; message?: string; error?: string }> {
-    const res = await fetch(`${API_BASE}/ai/validate-key`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      return { valid: false, error: errData.error || 'Validation failed' };
+    try {
+      const res = await fetch(`${API_BASE}/ai/validate-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      });
+      if (res.ok) {
+        return res.json();
+      }
+    } catch {
+      // ignore and fallback to client-side check
     }
-    return res.json();
+
+    // Direct client-side validation fallback
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const client = new GoogleGenAI({ apiKey: apiKey.trim() });
+      const response = await client.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'Ping test. Reply with: OK',
+      });
+      if (response && response.text) {
+        return { valid: true };
+      }
+      return { valid: false, message: 'No response from Gemini API' };
+    } catch (err: any) {
+      return { valid: false, error: err.message || 'Key validation failed' };
+    }
   },
 
   async generateAIMealPlan(members: Member[], apiKey?: string): Promise<WeeklyMealPlan> {
