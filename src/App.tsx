@@ -126,10 +126,11 @@ export function App() {
     }
   };
 
-  // Toggle Like
-  const handleToggleLike = async (dishId: string) => {
+  // Toggle Like (supports optional targetMemberId)
+  const handleToggleLike = async (dishId: string, targetMemberId?: string) => {
+    const memberId = targetMemberId || activeMemberId;
     try {
-      const updated = await api.toggleLike(dishId, activeMemberId, appState.group.id);
+      const updated = await api.toggleLike(dishId, memberId, appState.group.id);
       setAppState(updated);
     } catch {
       // Local fallback
@@ -137,23 +138,24 @@ export function App() {
         ...prev,
         dishes: prev.dishes.map((d) => {
           if (d.id !== dishId) return d;
-          const isLiked = d.likes.includes(activeMemberId);
+          const isLiked = d.likes.includes(memberId);
           return {
             ...d,
             likes: isLiked
-              ? d.likes.filter((id) => id !== activeMemberId)
-              : [...d.likes, activeMemberId],
-            dislikes: d.dislikes.filter((id) => id !== activeMemberId),
+              ? d.likes.filter((id) => id !== memberId)
+              : [...d.likes, memberId],
+            dislikes: d.dislikes.filter((id) => id !== memberId),
           };
         }),
       }));
     }
   };
 
-  // Toggle Dislike
-  const handleToggleDislike = async (dishId: string) => {
+  // Toggle Dislike (supports optional targetMemberId)
+  const handleToggleDislike = async (dishId: string, targetMemberId?: string) => {
+    const memberId = targetMemberId || activeMemberId;
     try {
-      const updated = await api.toggleDislike(dishId, activeMemberId, appState.group.id);
+      const updated = await api.toggleDislike(dishId, memberId, appState.group.id);
       setAppState(updated);
     } catch {
       // Local fallback
@@ -161,16 +163,87 @@ export function App() {
         ...prev,
         dishes: prev.dishes.map((d) => {
           if (d.id !== dishId) return d;
-          const isDisliked = d.dislikes.includes(activeMemberId);
+          const isDisliked = d.dislikes.includes(memberId);
           return {
             ...d,
             dislikes: isDisliked
-              ? d.dislikes.filter((id) => id !== activeMemberId)
-              : [...d.dislikes, activeMemberId],
-            likes: d.likes.filter((id) => id !== activeMemberId),
+              ? d.dislikes.filter((id) => id !== memberId)
+              : [...d.dislikes, memberId],
+            likes: d.likes.filter((id) => id !== memberId),
           };
         }),
       }));
+    }
+  };
+
+  // Add preference (Like / Dislike) for existing or new dish
+  const handleAddDishPreference = async (
+    dishName: string,
+    memberId: string,
+    preference: 'like' | 'dislike'
+  ) => {
+    const trimmed = dishName.trim();
+    if (!trimmed) return;
+
+    const member = appState.members.find((m) => m.id === memberId);
+    const memberName = member?.name || 'Member';
+
+    // Check if dish already exists in group (case-insensitive)
+    const existingDish = appState.dishes.find(
+      (d) => d.name.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (existingDish) {
+      if (preference === 'like') {
+        if (!existingDish.likes.includes(memberId)) {
+          await handleToggleLike(existingDish.id, memberId);
+        }
+      } else {
+        if (!existingDish.dislikes.includes(memberId)) {
+          await handleToggleDislike(existingDish.id, memberId);
+        }
+      }
+      showToast(`Updated ${memberName}'s taste for "${existingDish.name}"`);
+    } else {
+      // Create new dish and assign the preference
+      try {
+        const updated = await api.addDish({
+          groupId: appState.group.id,
+          name: trimmed,
+          suggestedBy: memberName,
+          suggestedByMemberId: memberId,
+        });
+
+        const newDish = updated.dishes.find((d) => d.name.toLowerCase() === trimmed.toLowerCase());
+        if (newDish && preference === 'dislike') {
+          const withDislike = await api.toggleDislike(newDish.id, memberId, appState.group.id);
+          setAppState(withDislike);
+        } else {
+          setAppState(updated);
+        }
+        showToast(
+          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}!`
+        );
+      } catch {
+        // Fallback local state
+        const newDish = {
+          id: `dish-${Date.now()}`,
+          groupId: appState.group.id,
+          name: trimmed,
+          suggestedBy: memberName,
+          suggestedByMemberId: memberId,
+          createdAt: new Date().toISOString(),
+          likes: preference === 'like' ? [memberId] : [],
+          dislikes: preference === 'dislike' ? [memberId] : [],
+        };
+        setAppState((prev) => ({
+          ...prev,
+          dishes: [newDish, ...prev.dishes],
+        }));
+        showToast(
+          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}!`
+        );
+      }
     }
   };
 
@@ -299,6 +372,9 @@ export function App() {
             onSelectMember={(id) => setActiveMemberId(id)}
             onAddMember={handleAddMember}
             onDeleteMember={handleDeleteMember}
+            onToggleLike={handleToggleLike}
+            onToggleDislike={handleToggleDislike}
+            onAddDishPreference={handleAddDishPreference}
           />
         </div>
 

@@ -6,8 +6,8 @@ interface DishFeedProps {
   dishes: Dish[];
   members: Member[];
   activeMemberId: string;
-  onToggleLike: (dishId: string) => void;
-  onToggleDislike: (dishId: string) => void;
+  onToggleLike: (dishId: string, targetMemberId?: string) => void;
+  onToggleDislike: (dishId: string, targetMemberId?: string) => void;
   onDeleteDish: (dishId: string) => void;
 }
 
@@ -48,6 +48,7 @@ export const DishFeed: React.FC<DishFeedProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'liked' | 'my-suggestions'>('all');
+  const [expandedDishId, setExpandedDishId] = useState<string | null>(null);
 
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
@@ -156,6 +157,7 @@ export const DishFeed: React.FC<DishFeedProps> = ({
           {filteredDishes.map((dish) => {
             const isLikedByMe = dish.likes.includes(activeMemberId);
             const isDislikedByMe = dish.dislikes.includes(activeMemberId);
+            const isExpanded = expandedDishId === dish.id;
             const emoji = getDishEmoji(dish.name);
 
             // Names of likers & dislikers
@@ -233,8 +235,71 @@ export const DishFeed: React.FC<DishFeedProps> = ({
                   )}
                 </div>
 
-                {/* Bottom Action Buttons: Like & Dislike */}
-                <div className="pt-4 mt-3 border-t border-border-light flex items-center gap-2">
+                {/* Per-member votes manager dropdown/drawer */}
+                <div className="mt-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDishId(isExpanded ? null : dish.id)}
+                    className="text-[11px] font-semibold text-charcoal-muted hover:text-primary transition-colors flex items-center gap-1"
+                  >
+                    <span>{isExpanded ? '▲ Hide member votes' : '▼ Update member likes & dislikes'}</span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="mt-2.5 p-2.5 bg-background rounded-xl border border-border space-y-2 text-xs animate-in fade-in duration-100">
+                      <p className="text-[10px] uppercase font-bold text-charcoal-muted">
+                        Vote on behalf of members:
+                      </p>
+                      <div className="space-y-1.5">
+                        {members.map((member) => {
+                          const mLike = dish.likes.includes(member.id);
+                          const mDislike = dish.dislikes.includes(member.id);
+
+                          return (
+                            <div
+                              key={member.id}
+                              className="flex items-center justify-between gap-2 py-1 px-1.5 rounded-lg hover:bg-surface"
+                            >
+                              <span className="font-medium text-charcoal truncate flex-1 text-xs">
+                                {member.name}
+                              </span>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleLike(dish.id, member.id)}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                                    mLike
+                                      ? 'bg-emerald-600 text-white border-emerald-600'
+                                      : 'bg-surface text-emerald-800 border-emerald-200 hover:bg-emerald-50'
+                                  }`}
+                                  title={`Toggle Like for ${member.name}`}
+                                >
+                                  ❤️ Like
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleDislike(dish.id, member.id)}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                                    mDislike
+                                      ? 'bg-red-600 text-white border-red-600'
+                                      : 'bg-surface text-red-800 border-red-200 hover:bg-red-50'
+                                  }`}
+                                  title={`Toggle Dislike for ${member.name}`}
+                                >
+                                  👎 Avoid
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Action Buttons: Like & Dislike for active user */}
+                <div className="pt-3 mt-3 border-t border-border-light flex items-center gap-2">
                   {/* Like Button */}
                   <button
                     type="button"
