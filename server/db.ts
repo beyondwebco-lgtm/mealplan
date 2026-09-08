@@ -45,6 +45,10 @@ export async function initDb() {
     `);
 
     // Seed sample group if empty
+    // Clean up any old obsolete sample members from database
+    await client.query(`DELETE FROM members WHERE id IN ('member-rahul', 'member-priya', 'member-arjun', 'member-ananya') OR name IN ('Rahul', 'Priya', 'Arjun', 'Ananya')`);
+    await client.query(`UPDATE groups SET creator_name = 'Maneesh' WHERE creator_name = 'Rahul'`);
+
     const checkRes = await client.query('SELECT COUNT(*) FROM groups');
     const count = parseInt(checkRes.rows[0].count, 10);
     if (count === 0) {
@@ -62,48 +66,41 @@ export async function initDb() {
 
       await client.query(
         `INSERT INTO groups (id, name, creator_name, meal_plan) VALUES ($1, $2, $3, $4)`,
-        [sampleGroupId, 'Our Weekly Meals', 'Rahul', JSON.stringify(sampleMealPlan)]
+        [sampleGroupId, 'Our Weekly Meals', 'Maneesh', JSON.stringify(sampleMealPlan)]
       );
 
       const sampleMembers = [
         {
-          id: 'member-rahul',
-          name: 'Rahul',
+          id: 'member-maneesh',
+          name: 'Maneesh',
           avatarColor: 'bg-emerald-700',
           likes: ['Paneer Butter Masala', 'Dal Tadka', 'Vegetable Biryani', 'Roti'],
-          dislikes: ['Brinjal Curry', 'Bitter Gourd Curry'],
+          dislikes: ['Bitter Gourd Curry'],
         },
         {
-          id: 'member-priya',
-          name: 'Priya',
+          id: 'member-jinka',
+          name: 'Jinka',
           avatarColor: 'bg-teal-700',
           likes: ['Dal Tadka', 'Paneer Butter Masala', 'Chapati', 'Aloo Curry'],
           dislikes: ['Fish Curry'],
         },
         {
-          id: 'member-arjun',
-          name: 'Arjun',
+          id: 'member-vishwa',
+          name: 'Vishwa',
           avatarColor: 'bg-amber-700',
-          likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka'],
+          likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka', 'Dosa with Chutney'],
           dislikes: ['Brinjal Curry'],
-        },
-        {
-          id: 'member-ananya',
-          name: 'Ananya',
-          avatarColor: 'bg-rose-700',
-          likes: ['Paneer Butter Masala', 'Vegetable Biryani', 'Aloo Curry'],
-          dislikes: ['Bitter Gourd Curry'],
         },
       ];
 
       for (const m of sampleMembers) {
-        await client.query(
+        await pool.query(
           `INSERT INTO members (id, group_id, name, avatar_color, likes, dislikes)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [m.id, sampleGroupId, m.name, m.avatarColor, JSON.stringify(m.likes), JSON.stringify(m.dislikes)]
         );
       }
-      console.log('Seeded database successfully!');
+      console.log('Seeded database successfully with Maneesh, Jinka, Vishwa!');
     }
   } catch (err) {
     console.error('Database initialization error:', err);

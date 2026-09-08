@@ -18,15 +18,59 @@ import { WeeklyMealPlan } from './components/WeeklyMealPlan';
 import { AddMemberModal } from './components/AddMemberModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
 import { JoinGroupModal } from './components/JoinGroupModal';
+import { MealIdeaPrompt } from './components/MealIdeaPrompt';
 import { AIChatWidget } from './components/AIChatWidget';
 import { ToastContainer } from './components/Toast';
 import { Loader2, Database } from 'lucide-react';
 
+const STORAGE_KEY_GROUPS = 'mealplan_persisted_groups_v3';
+
+function sanitizeGroupMembers(groupList: Group[]): Group[] {
+  return groupList.map((g) => ({
+    ...g,
+    creatorName: g.creatorName === 'Rahul' ? 'Maneesh' : g.creatorName,
+    members: g.members.filter(
+      (m) =>
+        !['member-rahul', 'member-priya', 'member-arjun', 'member-ananya'].includes(m.id) &&
+        !['Rahul', 'Priya', 'Arjun', 'Ananya'].includes(m.name)
+    ),
+  })).map((g) => {
+    // If group has no members left after filtering, attach default Maneesh, Jinka, Vishwa
+    if (g.members.length === 0) {
+      return { ...g, creatorName: 'Maneesh', members: sampleGroup.members };
+    }
+    return g;
+  });
+}
+
 export function App() {
-  const [groups, setGroups] = useState<Group[]>([sampleGroup]);
+  const [groups, setGroups] = useState<Group[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_GROUPS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = sanitizeGroupMembers(parsed);
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [sampleGroup];
+  });
   const [activeGroupIdState, setActiveGroupIdState] = useState<string>(sampleGroup.id);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
+
+  // Sync groups to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_GROUPS, JSON.stringify(groups));
+    } catch {
+      // ignore
+    }
+  }, [groups]);
 
   const [currentTab, setCurrentTab] = useState<NavigationTab | 'landing'>('dashboard');
 
@@ -57,11 +101,12 @@ export function App() {
       setIsLoading(true);
       const fetched = await api.fetchGroups();
       if (Array.isArray(fetched) && fetched.length > 0) {
-        setGroups(fetched);
+        const cleaned = sanitizeGroupMembers(fetched);
+        setGroups(cleaned);
         setIsDbConnected(true);
         setActiveGroupIdState((prev) => {
-          if (fetched.some((g) => g.id === prev)) return prev;
-          return fetched[0].id;
+          if (cleaned.some((g) => g.id === prev)) return prev;
+          return cleaned[0].id;
         });
       }
     } catch (err) {
@@ -410,6 +455,14 @@ export function App() {
           />
         ) : (
           <div className="space-y-8">
+            {/* Main Option: Type your idea for lunch, dinner, curries, or cravings */}
+            <MealIdeaPrompt
+              activeGroup={activeGroup}
+              onUpdateMealPlan={handleChangeMeal}
+              onAddLike={handleAddLike}
+              showToast={showToast}
+            />
+
             {/* Dashboard Greeting & Quick Stats */}
             <DashboardHeader
               group={activeGroup}

@@ -91,7 +91,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               required
               value={creatorName}
               onChange={(e) => setCreatorName(e.target.value)}
-              placeholder="e.g. Rahul"
+              placeholder="e.g. Maneesh"
               className="w-full px-3 py-2 text-sm rounded-xl border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-surface"
             />
           </div>

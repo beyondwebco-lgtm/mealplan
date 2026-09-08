@@ -51,13 +51,13 @@ export const emptyMealPlan: WeeklyMealPlan = {
 export const sampleGroup: Group = {
   id: 'group-our-weekly-meals',
   name: 'Our Weekly Meals',
-  creatorName: 'Rahul',
+  creatorName: 'Maneesh',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   members: [
     {
-      id: 'member-rahul',
-      name: 'Rahul',
+      id: 'member-maneesh',
+      name: 'Maneesh',
       avatarColor: 'bg-emerald-700',
       likes: [
         'Paneer Butter Masala',
@@ -66,13 +66,12 @@ export const sampleGroup: Group = {
         'Roti',
       ],
       dislikes: [
-        'Brinjal Curry',
         'Bitter Gourd Curry',
       ],
     },
     {
-      id: 'member-priya',
-      name: 'Priya',
+      id: 'member-jinka',
+      name: 'Jinka',
       avatarColor: 'bg-teal-700',
       likes: [
         'Dal Tadka',
@@ -85,29 +84,17 @@ export const sampleGroup: Group = {
       ],
     },
     {
-      id: 'member-arjun',
-      name: 'Arjun',
+      id: 'member-vishwa',
+      name: 'Vishwa',
       avatarColor: 'bg-amber-700',
       likes: [
         'Chicken Curry',
         'Vegetable Biryani',
         'Dal Tadka',
+        'Dosa with Chutney',
       ],
       dislikes: [
         'Brinjal Curry',
-      ],
-    },
-    {
-      id: 'member-ananya',
-      name: 'Ananya',
-      avatarColor: 'bg-rose-700',
-      likes: [
-        'Paneer Butter Masala',
-        'Vegetable Biryani',
-        'Aloo Curry',
-      ],
-      dislikes: [
-        'Bitter Gourd Curry',
       ],
     },
   ],

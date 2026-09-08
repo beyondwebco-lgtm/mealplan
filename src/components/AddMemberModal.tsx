@@ -147,7 +147,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
                 setName(e.target.value);
                 if (error) setError(null);
               }}
-              placeholder="e.g. Rahul, Priya, Alex"
+              placeholder="e.g. Maneesh, Jinka, Vishwa"
               className="w-full px-3 py-2 text-sm rounded-xl border border-border focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-surface text-charcoal"
             />
           </div>

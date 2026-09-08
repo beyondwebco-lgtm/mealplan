@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
-import { generateAIMealPlan, generateAIRecipe, generateAIChat, validateGeminiKey } from './ai';
+import { generateAIMealPlan, generateAIRecipe, generateAIChat, validateGeminiKey, generateMealIdeas } from './ai';
 
 dotenv.config();
 
@@ -46,6 +46,10 @@ async function ensureDbInit() {
       CREATE INDEX IF NOT EXISTS idx_members_group_id ON members(group_id);
     `);
 
+    // Clean up any old obsolete sample members from database
+    await client.query(`DELETE FROM members WHERE id IN ('member-rahul', 'member-priya', 'member-arjun', 'member-ananya') OR name IN ('Rahul', 'Priya', 'Arun', 'Ananya')`);
+    await client.query(`UPDATE groups SET creator_name = 'Maneesh' WHERE creator_name = 'Rahul'`);
+
     const checkRes = await client.query('SELECT COUNT(*) FROM groups');
     const count = parseInt(checkRes.rows[0].count, 10);
     if (count === 0) {
@@ -62,37 +66,30 @@ async function ensureDbInit() {
 
       await client.query(
         `INSERT INTO groups (id, name, creator_name, meal_plan) VALUES ($1, $2, $3, $4)`,
-        [sampleGroupId, 'Our Weekly Meals', 'Rahul', JSON.stringify(sampleMealPlan)]
+        [sampleGroupId, 'Our Weekly Meals', 'Maneesh', JSON.stringify(sampleMealPlan)]
       );
 
       const sampleMembers = [
         {
-          id: 'member-rahul',
-          name: 'Rahul',
+          id: 'member-maneesh',
+          name: 'Maneesh',
           avatarColor: 'bg-emerald-700',
           likes: ['Paneer Butter Masala', 'Dal Tadka', 'Vegetable Biryani', 'Roti'],
-          dislikes: ['Brinjal Curry', 'Bitter Gourd Curry'],
+          dislikes: ['Bitter Gourd Curry'],
         },
         {
-          id: 'member-priya',
-          name: 'Priya',
+          id: 'member-jinka',
+          name: 'Jinka',
           avatarColor: 'bg-teal-700',
           likes: ['Dal Tadka', 'Paneer Butter Masala', 'Chapati', 'Aloo Curry'],
           dislikes: ['Fish Curry'],
         },
         {
-          id: 'member-arjun',
-          name: 'Arjun',
+          id: 'member-vishwa',
+          name: 'Vishwa',
           avatarColor: 'bg-amber-700',
-          likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka'],
+          likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka', 'Dosa with Chutney'],
           dislikes: ['Brinjal Curry'],
-        },
-        {
-          id: 'member-ananya',
-          name: 'Ananya',
-          avatarColor: 'bg-rose-700',
-          likes: ['Paneer Butter Masala', 'Vegetable Biryani', 'Aloo Curry'],
-          dislikes: ['Bitter Gourd Curry'],
         },
       ];
 
@@ -287,71 +284,16 @@ router.put('/groups/:id/mealplan', async (req, res) => {
   }
 });
 
-router.post('/reset-demo', async (_req, res) => {
+// POST Gemini AI suggest meal ideas based on freeform prompt
+router.post('/ai/suggest-ideas', async (req, res) => {
   try {
-    await pool.query('DELETE FROM members');
-    await pool.query('DELETE FROM groups');
-
-    const sampleGroupId = 'group-our-weekly-meals';
-    const sampleMealPlan = {
-      monday: { breakfast: 'Idli & Sambar', lunch: 'Dal Tadka + Rice', dinner: 'Paneer Butter Masala + Roti' },
-      tuesday: { breakfast: 'Poha', lunch: 'Aloo Curry + Chapati', dinner: 'Dal Tadka + Jeera Rice' },
-      wednesday: { breakfast: 'Upma', lunch: 'Vegetable Biryani + Raita', dinner: 'Paneer Butter Masala + Phulka' },
-      thursday: { breakfast: 'Dosa with Chutney', lunch: 'Dal Tadka + Steamed Rice', dinner: 'Chicken Curry / Paneer + Roti' },
-      friday: { breakfast: 'Paratha with Curd', lunch: 'Aloo Curry + Rice', dinner: 'Vegetable Biryani' },
-      saturday: { breakfast: 'Puri Bhaji', lunch: 'Paneer Butter Masala + Naan', dinner: 'Dal Tadka + Roti' },
-      sunday: { breakfast: 'Masala Omelette / Paneer Toast', lunch: 'Special Dum Biryani + Salan', dinner: 'Light Khichdi & Papad' },
-    };
-
-    await pool.query(
-      `INSERT INTO groups (id, name, creator_name, meal_plan) VALUES ($1, $2, $3, $4)`,
-      [sampleGroupId, 'Our Weekly Meals', 'Rahul', JSON.stringify(sampleMealPlan)]
-    );
-
-    const sampleMembers = [
-      {
-        id: 'member-rahul',
-        name: 'Rahul',
-        avatarColor: 'bg-emerald-700',
-        likes: ['Paneer Butter Masala', 'Dal Tadka', 'Vegetable Biryani', 'Roti'],
-        dislikes: ['Brinjal Curry', 'Bitter Gourd Curry'],
-      },
-      {
-        id: 'member-priya',
-        name: 'Priya',
-        avatarColor: 'bg-teal-700',
-        likes: ['Dal Tadka', 'Paneer Butter Masala', 'Chapati', 'Aloo Curry'],
-        dislikes: ['Fish Curry'],
-      },
-      {
-        id: 'member-arjun',
-        name: 'Arjun',
-        avatarColor: 'bg-amber-700',
-        likes: ['Chicken Curry', 'Vegetable Biryani', 'Dal Tadka'],
-        dislikes: ['Brinjal Curry'],
-      },
-      {
-        id: 'member-ananya',
-        name: 'Ananya',
-        avatarColor: 'bg-rose-700',
-        likes: ['Paneer Butter Masala', 'Vegetable Biryani', 'Aloo Curry'],
-        dislikes: ['Bitter Gourd Curry'],
-      },
-    ];
-
-    for (const m of sampleMembers) {
-      await pool.query(
-        `INSERT INTO members (id, group_id, name, avatar_color, likes, dislikes)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [m.id, sampleGroupId, m.name, m.avatarColor, JSON.stringify(m.likes), JSON.stringify(m.dislikes)]
-      );
-    }
-
-    const demo = await getFullGroup(sampleGroupId);
-    res.json({ success: true, group: demo });
+    const { query, members, apiKey } = req.body;
+    if (!query) return res.status(400).json({ error: 'Query is required' });
+    const ideas = await generateMealIdeas(query, members || [], apiKey);
+    res.json({ success: true, ideas });
   } catch (err: any) {
-    console.error('Error resetting demo:', err);
-    res.status(500).json({ error: err.message });
+    console.error('AI Meal Ideas error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate meal ideas' });
   }
 });
 

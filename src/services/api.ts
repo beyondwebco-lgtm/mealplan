@@ -208,4 +208,83 @@ GUIDELINES:
     const data = await res.json();
     return data.recipe;
   },
+
+  async suggestMealIdeas(
+    query: string,
+    members: Member[],
+    apiKey?: string
+  ): Promise<Array<{
+    title: string;
+    mealType: 'breakfast' | 'lunch' | 'dinner' | 'any';
+    description: string;
+    matchReason: string;
+    prepTime: string;
+    cookTime: string;
+    ingredients: string[];
+    quickSteps?: string[];
+  }>> {
+    try {
+      const res = await fetch(`${API_BASE}/ai/suggest-ideas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, members, apiKey }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to suggest meal ideas');
+      }
+      const data = await res.json();
+      return data.ideas;
+    } catch (serverErr: any) {
+      // Fallback: If custom API key is available, run direct client-side Gemini call
+      if (apiKey && apiKey.trim().length > 0) {
+        try {
+          const { GoogleGenAI } = await import('@google/genai');
+          const client = new GoogleGenAI({ apiKey: apiKey.trim() });
+
+          const prompt = `
+You are an expert culinary AI Chef.
+The user wants meal ideas or dishes based on their request: "${query}".
+
+GROUP TASTE PROFILES:
+${members
+  .map(
+    (m) =>
+      `- ${m.name}: Likes: [${m.likes.join(', ')}], Dislikes/Avoid: [${m.dislikes.join(', ')}]`
+  )
+  .join('\n')}
+
+INSTRUCTIONS:
+1. Suggest 3 to 4 distinct, delicious dish ideas matching the user's request.
+2. STRICTLY respect member dislikes.
+3. Output ONLY a valid JSON array of objects without markdown code blocks:
+
+[
+  {
+    "title": "Dish Name",
+    "mealType": "dinner",
+    "description": "Short appetizing description",
+    "matchReason": "Why it suits the group",
+    "prepTime": "15 mins",
+    "cookTime": "20 mins",
+    "ingredients": ["Item 1", "Item 2"],
+    "quickSteps": ["Step 1", "Step 2"]
+  }
+]
+`;
+
+          const response = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+          });
+          const rawText = response.text || '';
+          const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+          return JSON.parse(cleaned);
+        } catch (clientErr: any) {
+          throw new Error(clientErr.message || serverErr.message);
+        }
+      }
+      throw serverErr;
+    }
+  },
 };

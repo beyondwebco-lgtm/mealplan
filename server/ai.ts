@@ -215,3 +215,54 @@ Output ONLY a valid JSON object with the following structure without markdown co
 
   return JSON.parse(cleaned);
 }
+
+/**
+ * AI Chef: Generate tailored meal ideas, curries, lunch/dinner suggestions based on free-form prompt
+ */
+export async function generateMealIdeas(
+  query: string,
+  members: { name: string; likes: string[]; dislikes: string[] }[],
+  customApiKey?: string
+) {
+  const prompt = `
+You are an expert culinary AI Chef and meal planner.
+The user wants meal ideas, curries, or dish suggestions based on their request: "${query}".
+
+GROUP TASTE PROFILE:
+${members
+  .map(
+    (m) =>
+      `- ${m.name}: Likes: [${m.likes.length ? m.likes.join(', ') : 'Open'}], Dislikes/Avoid: [${
+        m.dislikes.length ? m.dislikes.join(', ') : 'None'
+      }]`
+  )
+  .join('\n')}
+
+INSTRUCTIONS:
+1. Suggest 3 to 4 distinct, appetizing, and practical dish/curry/meal ideas matching the user's idea.
+2. STRICTLY ensure none of the ideas violate any member's dislikes.
+3. Highlight flavors or ingredients that please the group's taste profiles.
+4. Output MUST be ONLY a valid JSON array of objects without markdown code blocks:
+
+[
+  {
+    "title": "Dish Name",
+    "mealType": "dinner",
+    "description": "Short appetizing description of the dish",
+    "matchReason": "Why this is great for the group",
+    "prepTime": "15 mins",
+    "cookTime": "20 mins",
+    "ingredients": ["Item 1", "Item 2", "Item 3", "Item 4"],
+    "quickSteps": ["Step 1", "Step 2", "Step 3"]
+  }
+]
+`;
+
+  const rawText = await generateContentWithFallback(prompt, customApiKey);
+  const cleaned = rawText
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  return JSON.parse(cleaned);
+}
