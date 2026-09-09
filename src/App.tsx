@@ -3,13 +3,12 @@ import type { AppState, Toast as ToastType } from './types';
 import { sampleGroup, sampleMembers, sampleDishes } from './data/sampleData';
 import { api } from './services/api';
 import { Navbar } from './components/Navbar';
+import { MemberSelectScreen } from './components/MemberSelectScreen';
 import { HeroDishInput } from './components/HeroDishInput';
 import { DishFeed } from './components/DishFeed';
 import { GroupInsights } from './components/GroupInsights';
 import { MembersSection } from './components/MembersSection';
-import { SimpleAISuggestions } from './components/SimpleAISuggestions';
 import { ToastContainer } from './components/Toast';
-import { Loader2, Database, AlertCircle } from 'lucide-react';
 
 const FALLBACK_STATE: AppState = {
   group: sampleGroup,
@@ -17,13 +16,21 @@ const FALLBACK_STATE: AppState = {
   dishes: sampleDishes,
 };
 
+const STORAGE_KEY = 'mealtogether_current_member_id';
+
 export function App() {
   const [appState, setAppState] = useState<AppState>(FALLBACK_STATE);
-  const [activeMemberId, setActiveMemberId] = useState<string>('member-maneesh');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  
+  // Read stored member or null if first time
+  const [activeMemberId, setActiveMemberId] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_KEY);
+  });
+  const [isSelectingMember, setIsSelectingMember] = useState<boolean>(() => {
+    return !localStorage.getItem(STORAGE_KEY);
+  });
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
-  const [dbError, setDbError] = useState<string | null>(null);
 
   // Reference for scrolling to members section
   const membersSectionRef = useRef<HTMLDivElement>(null);
@@ -36,34 +43,42 @@ export function App() {
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3200);
+    }, 2800);
   };
 
   const handleDismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Load board from PostgreSQL
+  // Select Member handler
+  const handleSelectCurrentMember = (memberId: string) => {
+    setActiveMemberId(memberId);
+    localStorage.setItem(STORAGE_KEY, memberId);
+    setIsSelectingMember(false);
+  };
+
+  // Trigger switch member screen
+  const handleStartSwitchMember = () => {
+    setIsSelectingMember(true);
+  };
+
+  // Load board from PostgreSQL / local state
   const loadBoard = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setDbError(null);
       const data = await api.fetchBoard('group-our-meals');
       if (data && data.group && Array.isArray(data.members) && Array.isArray(data.dishes)) {
         setAppState(data);
         setIsDbConnected(true);
 
-        // Ensure activeMemberId is valid
+        // Ensure activeMemberId is valid if already set
         setActiveMemberId((prev) => {
+          if (!prev) return null;
           if (data.members.some((m) => m.id === prev)) return prev;
-          return data.members[0]?.id || 'member-maneesh';
+          return data.members[0]?.id || null;
         });
       }
     } catch (err: any) {
-      console.warn('API error, falling back to local state:', err);
-      setDbError(err.message || 'Connecting to database');
-    } finally {
-      setIsLoading(false);
+      console.warn('API fetch notice, using fallback state:', err);
     }
   }, []);
 
@@ -82,9 +97,8 @@ export function App() {
         suggestedByMemberId,
       });
       setAppState(updated);
-      showToast(`Added "${name}" to the board!`);
-    } catch (err: any) {
-      console.error(err);
+      showToast(`Added "${name}"`);
+    } catch {
       // Fallback local update
       const newDish = {
         id: `dish-${Date.now()}`,
@@ -100,7 +114,7 @@ export function App() {
         ...prev,
         dishes: [newDish, ...prev.dishes],
       }));
-      showToast(`Added "${name}" to the board!`);
+      showToast(`Added "${name}"`);
     } finally {
       setIsSubmitting(false);
     }
@@ -111,7 +125,7 @@ export function App() {
     const dish = appState.dishes.find((d) => d.id === dishId);
     if (!dish) return;
 
-    if (window.confirm(`Remove "${dish.name}" from the board?`)) {
+    if (window.confirm(`Remove "${dish.name}"?`)) {
       try {
         const updated = await api.deleteDish(dishId, appState.group.id);
         setAppState(updated);
@@ -126,9 +140,9 @@ export function App() {
     }
   };
 
-  // Toggle Like (supports optional targetMemberId)
+  // Toggle Like
   const handleToggleLike = async (dishId: string, targetMemberId?: string) => {
-    const memberId = targetMemberId || activeMemberId;
+    const memberId = targetMemberId || activeMemberId || appState.members[0]?.id || 'member-jinka';
     try {
       const updated = await api.toggleLike(dishId, memberId, appState.group.id);
       setAppState(updated);
@@ -151,9 +165,9 @@ export function App() {
     }
   };
 
-  // Toggle Dislike (supports optional targetMemberId)
+  // Toggle Dislike
   const handleToggleDislike = async (dishId: string, targetMemberId?: string) => {
-    const memberId = targetMemberId || activeMemberId;
+    const memberId = targetMemberId || activeMemberId || appState.members[0]?.id || 'member-jinka';
     try {
       const updated = await api.toggleDislike(dishId, memberId, appState.group.id);
       setAppState(updated);
@@ -176,7 +190,7 @@ export function App() {
     }
   };
 
-  // Add preference (Like / Dislike) for existing or new dish
+  // Add preference (Like / Dislike)
   const handleAddDishPreference = async (
     dishName: string,
     memberId: string,
@@ -188,7 +202,6 @@ export function App() {
     const member = appState.members.find((m) => m.id === memberId);
     const memberName = member?.name || 'Member';
 
-    // Check if dish already exists in group (case-insensitive)
     const existingDish = appState.dishes.find(
       (d) => d.name.toLowerCase() === trimmed.toLowerCase()
     );
@@ -203,9 +216,8 @@ export function App() {
           await handleToggleDislike(existingDish.id, memberId);
         }
       }
-      showToast(`Updated ${memberName}'s taste for "${existingDish.name}"`);
+      showToast(`Updated tastes for "${existingDish.name}"`);
     } else {
-      // Create new dish and assign the preference
       try {
         const updated = await api.addDish({
           groupId: appState.group.id,
@@ -222,10 +234,9 @@ export function App() {
           setAppState(updated);
         }
         showToast(
-          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}!`
+          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}`
         );
       } catch {
-        // Fallback local state
         const newDish = {
           id: `dish-${Date.now()}`,
           groupId: appState.group.id,
@@ -241,7 +252,7 @@ export function App() {
           dishes: [newDish, ...prev.dishes],
         }));
         showToast(
-          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}!`
+          `Added "${trimmed}" to ${memberName}'s ${preference === 'like' ? 'Likes' : "Don't Likes"}`
         );
       }
     }
@@ -256,7 +267,7 @@ export function App() {
         avatarColor,
       });
       setAppState(updated);
-      showToast(`Welcome ${name} to ${appState.group.name}!`);
+      showToast(`Added ${name}`);
     } catch {
       const newMember = {
         id: `member-${Date.now()}`,
@@ -269,7 +280,7 @@ export function App() {
         ...prev,
         members: [...prev.members, newMember],
       }));
-      showToast(`Added ${name}!`);
+      showToast(`Added ${name}`);
     }
   };
 
@@ -301,101 +312,87 @@ export function App() {
     membersSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const scrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const effectiveMemberId = activeMemberId || appState.members[0]?.id || 'member-jinka';
+
+  // If user hasn't chosen their name or wants to switch member, show Who are you? screen
+  if (isSelectingMember || !activeMemberId) {
+    return (
+      <MemberSelectScreen
+        members={appState.members}
+        onSelectMember={handleSelectCurrentMember}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background text-charcoal flex flex-col antialiased selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-background text-charcoal flex flex-col antialiased">
       {/* Top Navbar */}
       <Navbar
         group={appState.group}
         members={appState.members}
-        activeMemberId={activeMemberId}
-        onChangeActiveMember={(id) => setActiveMemberId(id)}
+        activeMemberId={effectiveMemberId}
+        onChangeActiveMember={(id) => handleSelectCurrentMember(id)}
         onOpenMembers={scrollToMembers}
+        onScrollToSection={scrollToSection}
+        onSwitchMember={handleStartSwitchMember}
         isDbConnected={isDbConnected}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8 sm:space-y-10">
-        {/* Database Sync Status Banner */}
-        <div className="flex items-center justify-between text-xs bg-surface/70 border border-border px-4 py-2 rounded-2xl shadow-xs">
-          <div className="flex items-center gap-2">
-            <Database className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span className="font-semibold text-charcoal">PostgreSQL Single Source of Truth:</span>
-            <span className="text-emerald-700 font-medium">
-              {isDbConnected ? 'Neon PostgreSQL Connected' : 'Connecting to database...'}
-            </span>
-          </div>
-          {isLoading && (
-            <div className="flex items-center gap-1.5 text-primary">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Syncing...</span>
-            </div>
-          )}
-          {dbError && !isLoading && (
-            <div className="flex items-center gap-1 text-amber-700">
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>Offline cache active</span>
-            </div>
-          )}
-        </div>
-
-        {/* 1. HERO FEATURE: What should we eat? Dish Idea Input */}
+      {/* Main Single-Column Mobile-First Container */}
+      <main className="flex-1 max-w-xl sm:max-w-2xl w-full mx-auto px-4 py-4 sm:py-6 space-y-6 pb-24 sm:pb-12">
+        {/* 1. Greeting & What should we eat? Hero Input */}
         <HeroDishInput
           members={appState.members}
-          activeMemberId={activeMemberId}
-          onChangeActiveMember={(id) => setActiveMemberId(id)}
+          activeMemberId={effectiveMemberId}
+          onChangeActiveMember={(id) => handleSelectCurrentMember(id)}
           onAddDish={handleAddDish}
           isSubmitting={isSubmitting}
         />
 
-        {/* 2. DISH IDEAS FEED */}
+        {/* 2. Dish Ideas List */}
         <DishFeed
           dishes={appState.dishes}
-          members={appState.members}
-          activeMemberId={activeMemberId}
-          onToggleLike={handleToggleLike}
-          onToggleDislike={handleToggleDislike}
+          activeMemberId={effectiveMemberId}
+          onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
+          onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
           onDeleteDish={handleDeleteDish}
         />
 
-        {/* 3. GROUP INSIGHTS (Most Liked, Popular Ideas, Disliked Dishes) */}
+        {/* 3. Group Insights: What Everyone Likes & Not Everyone Likes */}
         <GroupInsights
           dishes={appState.dishes}
           members={appState.members}
         />
 
-        {/* 4. MEMBERS SECTION */}
+        {/* 4. Members Section */}
         <div ref={membersSectionRef}>
           <MembersSection
             members={appState.members}
             dishes={appState.dishes}
-            activeMemberId={activeMemberId}
-            onSelectMember={(id) => setActiveMemberId(id)}
+            activeMemberId={effectiveMemberId}
+            onSelectMember={(id) => handleSelectCurrentMember(id)}
             onAddMember={handleAddMember}
             onDeleteMember={handleDeleteMember}
-            onToggleLike={handleToggleLike}
-            onToggleDislike={handleToggleDislike}
+            onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
+            onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
             onAddDishPreference={handleAddDishPreference}
           />
         </div>
-
-        {/* 5. SIMPLE AI HELPER (Need an idea?) */}
-        <SimpleAISuggestions
-          dishes={appState.dishes}
-          members={appState.members}
-          activeMemberId={activeMemberId}
-          onAddDish={handleAddDish}
-          showToast={showToast}
-        />
       </main>
 
       {/* Minimal Footer */}
-      <footer className="border-t border-border mt-12 py-6 text-center text-xs text-charcoal-muted">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="font-semibold text-charcoal">
-            MealTogether &mdash; Simple Collaborative Food Ideas Board
+      <footer className="border-t border-border py-4 text-center text-xs text-charcoal-muted">
+        <div className="max-w-xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-1">
+          <p className="font-medium text-charcoal">
+            MealTogether
           </p>
-          <p>
-            Powered by Neon PostgreSQL &bull; Maneesh, Jinka, Vishwa
+          <p className="text-[11px]">
+            Jinka · Arun · Maneesh · Vishwa · Sai Pavan · Tata · Indra
           </p>
         </div>
       </footer>
@@ -407,3 +404,4 @@ export function App() {
 }
 
 export default App;
+

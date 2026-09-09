@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Member, Dish } from '../types';
-import { Users, UserPlus, Heart, ThumbsDown, X, Trash2, Check, Sparkles, Plus, ArrowRightLeft } from 'lucide-react';
+import { X, Heart, ThumbsDown, Trash2 } from 'lucide-react';
 
 interface MembersSectionProps {
   members: Member[];
@@ -14,16 +14,6 @@ interface MembersSectionProps {
   onAddDishPreference: (dishName: string, memberId: string, preference: 'like' | 'dislike') => Promise<void>;
 }
 
-const AVATAR_PALETTE = [
-  'bg-emerald-700',
-  'bg-teal-700',
-  'bg-amber-700',
-  'bg-rose-700',
-  'bg-indigo-700',
-  'bg-cyan-700',
-  'bg-blue-700',
-];
-
 export const MembersSection: React.FC<MembersSectionProps> = ({
   members,
   dishes,
@@ -36,143 +26,103 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
   onAddDishPreference,
 }) => {
   const [newMemberName, setNewMemberName] = useState('');
-  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
-  // Inputs for adding like / dislike directly within member detail view
-  const [customLikeInput, setCustomLikeInput] = useState('');
-  const [customDislikeInput, setCustomDislikeInput] = useState('');
+  const [likeInput, setLikeInput] = useState('');
+  const [dislikeInput, setDislikeInput] = useState('');
   const [isSubmittingPref, setIsSubmittingPref] = useState(false);
 
-  const handleAddMemberSubmit = async (e: React.FormEvent) => {
+  const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newMemberName.trim();
-    if (!trimmed || isAddingMember) return;
+    if (!trimmed || isAdding) return;
 
-    setIsAddingMember(true);
+    setIsAdding(true);
     try {
-      const colorIndex = members.length % AVATAR_PALETTE.length;
-      await onAddMember(trimmed, AVATAR_PALETTE[colorIndex]);
+      await onAddMember(trimmed);
       setNewMemberName('');
     } finally {
-      setIsAddingMember(false);
+      setIsAdding(false);
     }
   };
 
-  const handleAddCustomLike = async (e: React.FormEvent) => {
+  const handleAddLike = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMember || !customLikeInput.trim() || isSubmittingPref) return;
+    if (!selectedMember || !likeInput.trim() || isSubmittingPref) return;
     setIsSubmittingPref(true);
     try {
-      await onAddDishPreference(customLikeInput.trim(), selectedMember.id, 'like');
-      setCustomLikeInput('');
+      await onAddDishPreference(likeInput.trim(), selectedMember.id, 'like');
+      setLikeInput('');
     } finally {
       setIsSubmittingPref(false);
     }
   };
 
-  const handleAddCustomDislike = async (e: React.FormEvent) => {
+  const handleAddDislike = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedMember || !customDislikeInput.trim() || isSubmittingPref) return;
+    if (!selectedMember || !dislikeInput.trim() || isSubmittingPref) return;
     setIsSubmittingPref(true);
     try {
-      await onAddDishPreference(customDislikeInput.trim(), selectedMember.id, 'dislike');
-      setCustomDislikeInput('');
+      await onAddDishPreference(dislikeInput.trim(), selectedMember.id, 'dislike');
+      setDislikeInput('');
     } finally {
       setIsSubmittingPref(false);
     }
   };
 
   return (
-    <section className="bg-surface rounded-2xl border border-border shadow-xs p-5 sm:p-6 space-y-5">
-      {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-light pb-4">
-        <div>
-          <h3 className="text-xl font-bold text-charcoal flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
-            Our Members
-          </h3>
-          <p className="text-xs text-charcoal-muted mt-0.5">
-            Click any member to update their likes, dislikes, or view their food profile.
-          </p>
-        </div>
-
-        {/* Quick Add Member inline form */}
-        <form onSubmit={handleAddMemberSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newMemberName}
-            onChange={(e) => setNewMemberName(e.target.value)}
-            placeholder="Add new member..."
-            className="text-xs px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:border-primary w-40 sm:w-48 text-charcoal placeholder:text-charcoal-muted"
-          />
-          <button
-            type="submit"
-            disabled={!newMemberName.trim() || isAddingMember}
-            className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center gap-1 shrink-0"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Add</span>
-          </button>
-        </form>
+    <section id="members-section" className="space-y-4 pt-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg sm:text-xl font-bold text-charcoal">
+          Our Members
+        </h2>
+        <span className="text-xs text-charcoal-muted">
+          Tap member to view taste profile
+        </span>
       </div>
 
-      {/* Member Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+      {/* Member List */}
+      <div className="space-y-2">
         {members.map((member) => {
-          const likedDishes = dishes.filter((d) => d.likes.includes(member.id));
-          const dislikedDishes = dishes.filter((d) => d.dislikes.includes(member.id));
+          const likedCount = dishes.filter((d) => d.likes.includes(member.id)).length;
+          const dislikedCount = dishes.filter((d) => d.dislikes.includes(member.id)).length;
           const isActive = member.id === activeMemberId;
 
           return (
             <div
               key={member.id}
               onClick={() => setSelectedMember(member)}
-              className={`group cursor-pointer rounded-2xl border p-4 transition-all duration-150 flex flex-col justify-between hover:shadow-card ${
+              className={`w-full text-left bg-surface border rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition-all shadow-subtle min-h-touch ${
                 isActive
-                  ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-200'
-                  : 'bg-background hover:bg-surface border-border hover:border-border-dark'
+                  ? 'border-primary/50 ring-1 ring-primary/20'
+                  : 'border-border hover:border-charcoal-subtle'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-full text-white font-bold flex items-center justify-center text-sm shadow-xs ${
-                    member.avatarColor || 'bg-emerald-700'
-                  }`}
-                >
-                  {member.name.charAt(0).toUpperCase()}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm sm:text-base text-charcoal">
+                    {member.name}
+                  </span>
+                  {isActive && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
+                      Current
+                    </span>
+                  )}
                 </div>
-                <div className="truncate">
-                  <div className="flex items-center gap-1.5">
-                    <h4 className="font-bold text-charcoal text-sm truncate">
-                      {member.name}
-                    </h4>
-                    {isActive && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-charcoal-muted mt-0.5">
-                    ❤️ {likedDishes.length} likes · 👎 {dislikedDishes.length}
-                  </p>
-                </div>
+                <p className="text-xs text-charcoal-muted mt-0.5">
+                  {likedCount} likes · {dislikedCount} dislikes
+                </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-border-light flex items-center justify-between text-xs">
-                <span className="text-primary font-semibold text-[11px] group-hover:underline">
-                  Manage tastes →
-                </span>
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 {!isActive && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectMember(member.id);
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-background hover:bg-emerald-100 text-charcoal-muted hover:text-emerald-800 border border-border"
+                    onClick={() => onSelectMember(member.id)}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-border text-charcoal hover:bg-background transition-colors min-h-touch flex items-center"
                   >
-                    Switch to
+                    Select
                   </button>
                 )}
               </div>
@@ -181,94 +131,82 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
         })}
       </div>
 
-      {/* Member Details & Preference Editor Modal */}
+      {/* Minimal Add Member Form */}
+      <div className="bg-surface border border-border rounded-xl p-3.5 sm:p-4 shadow-subtle space-y-2">
+        <span className="text-xs font-bold text-charcoal block">Add Member</span>
+        <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={newMemberName}
+            onChange={(e) => setNewMemberName(e.target.value)}
+            placeholder="Name"
+            className="flex-1 bg-background border border-border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-charcoal focus:outline-none focus:border-primary min-h-touch"
+          />
+          <button
+            type="submit"
+            disabled={!newMemberName.trim() || isAdding}
+            className="px-4 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 min-h-touch shrink-0"
+          >
+            Add Member
+          </button>
+        </form>
+      </div>
+
+      {/* Minimal Member Profile Modal */}
       {selectedMember && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-xs animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/40 backdrop-blur-xs"
           onClick={() => setSelectedMember(null)}
         >
           <div
-            className="bg-surface w-full max-w-xl rounded-2xl border border-border shadow-modal overflow-hidden p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+            className="bg-surface w-full max-w-md rounded-2xl border border-border shadow-modal p-5 space-y-4 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-border-light pb-4">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-12 h-12 rounded-full text-white font-bold flex items-center justify-center text-lg shadow-sm ${
-                    selectedMember.avatarColor || 'bg-emerald-700'
-                  }`}
-                >
-                  {selectedMember.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-charcoal">
-                    {selectedMember.name}&apos;s Food Tastes
-                  </h3>
-                  <p className="text-xs text-charcoal-muted">
-                    Add or remove favorite dishes and foods to avoid for {selectedMember.name}
-                  </p>
-                </div>
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-border-light">
+              <div>
+                <h3 className="text-lg font-bold text-charcoal">
+                  {selectedMember.name}
+                </h3>
+                <p className="text-xs text-charcoal-muted">Taste preferences</p>
               </div>
-
               <button
                 type="button"
                 onClick={() => setSelectedMember(null)}
-                className="p-1.5 text-charcoal-muted hover:text-charcoal rounded-lg hover:bg-border-light"
+                className="p-1.5 text-charcoal-muted hover:text-charcoal rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Things I Like Section */}
             {(() => {
               const liked = dishes.filter((d) => d.likes.includes(selectedMember.id));
               const disliked = dishes.filter((d) => d.dislikes.includes(selectedMember.id));
-              const unratedDishes = dishes.filter(
-                (d) => !d.likes.includes(selectedMember.id) && !d.dislikes.includes(selectedMember.id)
-              );
 
               return (
-                <div className="space-y-5">
-                  {/* 1. LIKES SECTION */}
-                  <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-200/70 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
-                        <Heart className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-                        Things {selectedMember.name} Likes ({liked.length})
-                      </span>
-                    </div>
+                <div className="space-y-4 text-xs">
+                  {/* Likes Section */}
+                  <div className="space-y-2">
+                    <span className="font-bold text-charcoal flex items-center gap-1.5">
+                      <Heart className="w-3.5 h-3.5 text-emerald-700 fill-emerald-700" />
+                      <span>Likes ({liked.length})</span>
+                    </span>
 
-                    {/* Likes Tag List with Remove / Switch options */}
                     {liked.length === 0 ? (
-                      <p className="text-xs text-charcoal-muted italic">
-                        No liked dishes yet. Add one below!
-                      </p>
+                      <p className="text-charcoal-muted italic text-[11px]">No liked dishes yet.</p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
-                        {liked.map((dish) => (
+                        {liked.map((d) => (
                           <span
-                            key={dish.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-surface text-emerald-900 border border-emerald-300 text-xs font-semibold shadow-xs"
+                            key={d.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-like-bg border border-like-border text-like-text font-medium text-xs"
                           >
-                            <span>{dish.name}</span>
-
-                            {/* Switch to Dislike button */}
+                            <span>{d.name}</span>
                             <button
                               type="button"
-                              onClick={() => onToggleDislike(dish.id, selectedMember.id)}
-                              className="p-0.5 text-emerald-700/70 hover:text-red-600 rounded"
-                              title="Move to Don't Like"
-                            >
-                              <ArrowRightLeft className="w-3 h-3" />
-                            </button>
-
-                            {/* Remove Like button */}
-                            <button
-                              type="button"
-                              onClick={() => onToggleLike(dish.id, selectedMember.id)}
-                              className="p-0.5 text-emerald-700 hover:text-red-700 rounded-full hover:bg-emerald-100"
-                              title={`Remove "${dish.name}" from likes`}
+                              onClick={() => onToggleLike(d.id, selectedMember.id)}
+                              className="p-0.5 hover:text-red-700"
+                              title="Remove like"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -277,66 +215,48 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
                       </div>
                     )}
 
-                    {/* Quick Add Input for Likes */}
-                    <form onSubmit={handleAddCustomLike} className="flex gap-2 pt-1">
+                    {/* Quick Add Like */}
+                    <form onSubmit={handleAddLike} className="flex gap-1.5 pt-1">
                       <input
                         type="text"
-                        value={customLikeInput}
-                        onChange={(e) => setCustomLikeInput(e.target.value)}
-                        placeholder={`Add a dish ${selectedMember.name} likes (e.g. Masala Dosa)...`}
+                        value={likeInput}
+                        onChange={(e) => setLikeInput(e.target.value)}
+                        placeholder={`Add dish ${selectedMember.name} likes...`}
                         disabled={isSubmittingPref}
-                        className="flex-1 text-xs px-3 py-2 rounded-xl border border-emerald-300 bg-surface focus:outline-none focus:ring-1 focus:ring-emerald-500 text-charcoal"
+                        className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-charcoal focus:outline-none focus:border-primary"
                       />
                       <button
                         type="submit"
-                        disabled={!customLikeInput.trim() || isSubmittingPref}
-                        className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1 disabled:opacity-50"
+                        disabled={!likeInput.trim() || isSubmittingPref}
+                        className="px-3 py-1.5 bg-primary text-white font-semibold rounded-lg text-xs disabled:opacity-40"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Like</span>
+                        + Add
                       </button>
                     </form>
                   </div>
 
-                  {/* 2. DISLIKES SECTION */}
-                  <div className="bg-red-50/50 rounded-2xl p-4 border border-red-200/70 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-red-950 uppercase tracking-wider flex items-center gap-1.5">
-                        <ThumbsDown className="w-4 h-4 text-red-500" />
-                        Things {selectedMember.name} Doesn&apos;t Like ({disliked.length})
-                      </span>
-                    </div>
+                  {/* Dislikes Section */}
+                  <div className="space-y-2 pt-2 border-t border-border-light">
+                    <span className="font-bold text-charcoal flex items-center gap-1.5">
+                      <ThumbsDown className="w-3.5 h-3.5 text-red-600" />
+                      <span>Doesn&apos;t Like ({disliked.length})</span>
+                    </span>
 
-                    {/* Dislikes Tag List with Remove / Switch options */}
                     {disliked.length === 0 ? (
-                      <p className="text-xs text-charcoal-muted italic">
-                        No food avoidances marked.
-                      </p>
+                      <p className="text-charcoal-muted italic text-[11px]">No avoidances marked.</p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
-                        {disliked.map((dish) => (
+                        {disliked.map((d) => (
                           <span
-                            key={dish.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-surface text-red-900 border border-red-300 text-xs font-semibold shadow-xs"
+                            key={d.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-dislike-bg border border-dislike-border text-dislike-text font-medium text-xs"
                           >
-                            <span>{dish.name}</span>
-
-                            {/* Switch to Like button */}
+                            <span>{d.name}</span>
                             <button
                               type="button"
-                              onClick={() => onToggleLike(dish.id, selectedMember.id)}
-                              className="p-0.5 text-red-700/70 hover:text-emerald-600 rounded"
-                              title="Move to Likes"
-                            >
-                              <ArrowRightLeft className="w-3 h-3" />
-                            </button>
-
-                            {/* Remove Dislike button */}
-                            <button
-                              type="button"
-                              onClick={() => onToggleDislike(dish.id, selectedMember.id)}
-                              className="p-0.5 text-red-700 hover:text-red-900 rounded-full hover:bg-red-100"
-                              title={`Remove "${dish.name}" from dislikes`}
+                              onClick={() => onToggleDislike(d.id, selectedMember.id)}
+                              className="p-0.5 hover:text-red-900"
+                              title="Remove dislike"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -345,101 +265,54 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
                       </div>
                     )}
 
-                    {/* Quick Add Input for Dislikes */}
-                    <form onSubmit={handleAddCustomDislike} className="flex gap-2 pt-1">
+                    {/* Quick Add Dislike */}
+                    <form onSubmit={handleAddDislike} className="flex gap-1.5 pt-1">
                       <input
                         type="text"
-                        value={customDislikeInput}
-                        onChange={(e) => setCustomDislikeInput(e.target.value)}
-                        placeholder={`Add a dish to avoid (e.g. Bitter Gourd, Fish)...`}
+                        value={dislikeInput}
+                        onChange={(e) => setDislikeInput(e.target.value)}
+                        placeholder={`Add food to avoid...`}
                         disabled={isSubmittingPref}
-                        className="flex-1 text-xs px-3 py-2 rounded-xl border border-red-300 bg-surface focus:outline-none focus:ring-1 focus:ring-red-500 text-charcoal"
+                        className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs text-charcoal focus:outline-none focus:border-primary"
                       />
                       <button
                         type="submit"
-                        disabled={!customDislikeInput.trim() || isSubmittingPref}
-                        className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1 disabled:opacity-50"
+                        disabled={!dislikeInput.trim() || isSubmittingPref}
+                        className="px-3 py-1.5 bg-dislike-text text-white font-semibold rounded-lg text-xs disabled:opacity-40"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Dislike</span>
+                        + Add
                       </button>
                     </form>
                   </div>
 
-                  {/* 3. QUICK RATING FROM EXISTING GROUP DISHES */}
-                  {unratedDishes.length > 0 && (
-                    <div className="bg-background rounded-2xl p-4 border border-border space-y-2.5">
-                      <span className="text-xs font-bold text-charcoal flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        Rate other existing group ideas for {selectedMember.name}:
-                      </span>
-
-                      <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto pt-1">
-                        {unratedDishes.map((dish) => (
-                          <div
-                            key={dish.id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface border border-border text-xs"
-                          >
-                            <span className="font-medium text-charcoal">{dish.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => onToggleLike(dish.id, selectedMember.id)}
-                              className="p-1 rounded text-emerald-700 hover:bg-emerald-50 hover:font-bold"
-                              title="Like"
-                            >
-                              ❤️
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onToggleDislike(dish.id, selectedMember.id)}
-                              className="p-1 rounded text-red-600 hover:bg-red-50 hover:font-bold"
-                              title="Dislike"
-                            >
-                              👎
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Footer Actions */}
-                  <div className="pt-2 flex justify-between items-center border-t border-border-light">
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-border-light flex items-center justify-between">
                     {members.length > 1 ? (
                       <button
                         type="button"
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              `Are you sure you want to remove ${selectedMember.name} from the group?`
-                            )
-                          ) {
+                          if (window.confirm(`Remove ${selectedMember.name} from group?`)) {
                             onDeleteMember(selectedMember.id);
                             setSelectedMember(null);
                           }
                         }}
-                        className="text-xs text-red-600 hover:text-red-800 hover:underline flex items-center gap-1"
+                        className="text-red-600 hover:text-red-800 text-xs flex items-center gap-1 font-medium"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        Remove member
+                        <span>Remove</span>
                       </button>
-                    ) : (
-                      <div />
-                    )}
+                    ) : <div />}
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectMember(selectedMember.id);
-                          setSelectedMember(null);
-                        }}
-                        className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl shadow-xs hover:bg-primary-hover transition-colors flex items-center gap-1"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Done / Switch to {selectedMember.name}
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectMember(selectedMember.id);
+                        setSelectedMember(null);
+                      }}
+                      className="px-3.5 py-1.5 bg-primary text-white font-semibold rounded-lg text-xs"
+                    >
+                      Set as active user
+                    </button>
                   </div>
                 </div>
               );
@@ -450,3 +323,4 @@ export const MembersSection: React.FC<MembersSectionProps> = ({
     </section>
   );
 };
+

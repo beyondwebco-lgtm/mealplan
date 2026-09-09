@@ -7,18 +7,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#F8F7F4',
+        background: '#FAFAF8',
         surface: '#FFFFFF',
         primary: {
           DEFAULT: '#2F5D50',
-          hover: '#24483E',
+          hover: '#254A40',
           light: '#3D7767',
           soft: '#E8F0EC',
-        },
-        accent: {
-          DEFAULT: '#D89B5B',
-          hover: '#C28343',
-          soft: '#FDF6EC',
         },
         charcoal: {
           DEFAULT: '#1F2933',
@@ -44,13 +39,18 @@ export default {
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
       },
+      minHeight: {
+        'touch': '44px',
+      },
+      minWidth: {
+        'touch': '44px',
+      },
       boxShadow: {
-        'subtle': '0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04)',
-        'card': '0 2px 8px -2px rgba(31, 41, 51, 0.06), 0 1px 4px -1px rgba(31, 41, 51, 0.04)',
-        'card-hover': '0 10px 25px -5px rgba(31, 41, 51, 0.08), 0 8px 10px -6px rgba(31, 41, 51, 0.04)',
-        'modal': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        'subtle': '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+        'modal': '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
       },
     },
   },
   plugins: [],
 }
+

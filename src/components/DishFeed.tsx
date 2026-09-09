@@ -1,356 +1,159 @@
 import React, { useState } from 'react';
-import type { Dish, Member } from '../types';
-import { Heart, ThumbsDown, Trash2, Search } from 'lucide-react';
+import type { Dish } from '../types';
+import { Heart, ThumbsDown, Trash2 } from 'lucide-react';
 
 interface DishFeedProps {
   dishes: Dish[];
-  members: Member[];
   activeMemberId: string;
   onToggleLike: (dishId: string, targetMemberId?: string) => void;
   onToggleDislike: (dishId: string, targetMemberId?: string) => void;
   onDeleteDish: (dishId: string) => void;
 }
 
-const DISH_EMOJIS: Record<string, string> = {
-  paneer: '🥘',
-  dosa: '🥞',
-  idli: '🥣',
-  biryani: '🍚',
-  dal: '🍲',
-  upma: '🥣',
-  chicken: '🍗',
-  curry: '🍛',
-  poori: '🫓',
-  puri: '🫓',
-  chapati: '🫓',
-  roti: '🫓',
-  rice: '🍚',
-  fish: '🐟',
-  salad: '🥗',
-  egg: '🍳',
-};
-
-function getDishEmoji(name: string): string {
-  const lower = name.toLowerCase();
-  for (const [key, emoji] of Object.entries(DISH_EMOJIS)) {
-    if (lower.includes(key)) return emoji;
-  }
-  return '🍽️';
-}
-
 export const DishFeed: React.FC<DishFeedProps> = ({
   dishes,
-  members,
   activeMemberId,
   onToggleLike,
   onToggleDislike,
   onDeleteDish,
 }) => {
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'liked' | 'my-suggestions'>('all');
-  const [expandedDishId, setExpandedDishId] = useState<string | null>(null);
-
-  const memberMap = new Map(members.map((m) => [m.id, m]));
+  const [filter, setFilter] = useState<'all' | 'liked'>('all');
 
   const filteredDishes = dishes.filter((dish) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      dish.name.toLowerCase().includes(q) ||
-      dish.suggestedBy.toLowerCase().includes(q);
-
-    if (!matchSearch) return false;
-
-    if (filter === 'liked') {
-      return dish.likes.length > 0;
-    }
-    if (filter === 'my-suggestions') {
-      return (
-        dish.suggestedByMemberId === activeMemberId ||
-        dish.suggestedBy.toLowerCase() === (memberMap.get(activeMemberId)?.name.toLowerCase() || '')
-      );
-    }
+    if (filter === 'liked') return dish.likes.length > 0;
     return true;
   });
 
   return (
-    <section className="space-y-4">
-      {/* Header and Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-xl sm:text-2xl font-bold text-charcoal flex items-center gap-2">
-            Dish Ideas
-            <span className="text-sm font-semibold px-2.5 py-0.5 rounded-full bg-primary-soft text-primary">
-              {dishes.length}
-            </span>
-          </h3>
-        </div>
+    <section id="ideas-section" className="space-y-3 pt-2">
+      {/* Section Header */}
+      <div className="flex items-center justify-between pb-1">
+        <h2 className="text-lg sm:text-xl font-bold text-charcoal">
+          Dish Ideas
+        </h2>
 
-        {/* Search & Filter pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="w-4 h-4 text-charcoal-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search dishes or members..."
-              className="text-xs pl-9 pr-3 py-2 rounded-xl border border-border bg-surface text-charcoal placeholder:text-charcoal-muted focus:outline-none focus:border-primary w-48 sm:w-56"
-            />
-          </div>
-
-          <div className="flex items-center bg-background border border-border p-0.5 rounded-xl text-xs">
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                filter === 'all'
-                  ? 'bg-surface text-charcoal font-bold shadow-xs'
-                  : 'text-charcoal-muted hover:text-charcoal'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('liked')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                filter === 'liked'
-                  ? 'bg-surface text-charcoal font-bold shadow-xs'
-                  : 'text-charcoal-muted hover:text-charcoal'
-              }`}
-            >
-              ❤️ Liked
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('my-suggestions')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                filter === 'my-suggestions'
-                  ? 'bg-surface text-charcoal font-bold shadow-xs'
-                  : 'text-charcoal-muted hover:text-charcoal'
-              }`}
-            >
-              My Ideas
-            </button>
-          </div>
+        {/* Minimal filter */}
+        <div className="flex items-center gap-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setFilter('all')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+              filter === 'all'
+                ? 'bg-charcoal text-white font-semibold'
+                : 'text-charcoal-muted hover:text-charcoal'
+            }`}
+          >
+            All ({dishes.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter('liked')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+              filter === 'liked'
+                ? 'bg-charcoal text-white font-semibold'
+                : 'text-charcoal-muted hover:text-charcoal'
+            }`}
+          >
+            ❤️ Liked
+          </button>
         </div>
       </div>
 
       {/* Empty State */}
       {dishes.length === 0 ? (
-        <div className="bg-surface rounded-2xl border border-dashed border-border-dark p-12 text-center space-y-3">
-          <div className="w-12 h-12 mx-auto rounded-full bg-primary-soft flex items-center justify-center text-primary text-xl">
-            🍲
-          </div>
-          <h4 className="font-bold text-charcoal text-base">No dish ideas added yet!</h4>
-          <p className="text-xs text-charcoal-muted max-w-sm mx-auto">
-            Use the box above to suggest your favorite curries, breakfasts, or dinner cravings.
+        <div className="bg-surface rounded-xl border border-border p-8 text-center space-y-1">
+          <p className="font-semibold text-charcoal text-sm">No dish ideas yet</p>
+          <p className="text-xs text-charcoal-muted">
+            Add a meal or curry idea above to get started.
           </p>
         </div>
       ) : filteredDishes.length === 0 ? (
-        <div className="bg-surface rounded-2xl border border-border p-8 text-center text-sm text-charcoal-muted">
-          No dishes match &ldquo;{search}&rdquo;.
+        <div className="bg-surface rounded-xl border border-border p-6 text-center text-xs text-charcoal-muted">
+          No liked dishes found.
         </div>
       ) : (
-        /* Dishes List Cards Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+        /* Clean List */
+        <div className="space-y-2.5">
           {filteredDishes.map((dish) => {
             const isLikedByMe = dish.likes.includes(activeMemberId);
             const isDislikedByMe = dish.dislikes.includes(activeMemberId);
-            const isExpanded = expandedDishId === dish.id;
-            const emoji = getDishEmoji(dish.name);
-
-            // Names of likers & dislikers
-            const likerNames = dish.likes
-              .map((id) => memberMap.get(id)?.name)
-              .filter(Boolean) as string[];
-
-            const dislikerNames = dish.dislikes
-              .map((id) => memberMap.get(id)?.name)
-              .filter(Boolean) as string[];
 
             return (
               <div
                 key={dish.id}
-                className={`bg-surface rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between shadow-xs hover:shadow-card ${
-                  isLikedByMe
-                    ? 'border-emerald-300 ring-1 ring-emerald-200/60'
-                    : isDislikedByMe
-                    ? 'border-red-200 bg-red-50/20'
-                    : 'border-border hover:border-border-dark'
-                }`}
+                className="bg-surface rounded-xl border border-border p-3.5 sm:p-4 space-y-3 shadow-subtle"
               >
-                <div>
-                  {/* Top Bar: Icon + Delete Action */}
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-2xl">{emoji}</span>
-
-                    <button
-                      type="button"
-                      onClick={() => onDeleteDish(dish.id)}
-                      className="p-1.5 text-charcoal-muted/60 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title={`Remove "${dish.name}"`}
-                      aria-label={`Delete ${dish.name}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                {/* Top Row: Dish Name & Delete */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-charcoal text-base sm:text-lg leading-tight">
+                      {dish.name}
+                    </h3>
+                    <p className="text-xs text-charcoal-muted mt-0.5">
+                      Suggested by <span className="font-medium text-charcoal">{dish.suggestedBy}</span>
+                    </p>
                   </div>
 
-                  {/* Dish Name */}
-                  <h4 className="font-bold text-charcoal text-base sm:text-lg mt-2 leading-snug">
-                    {dish.name}
-                  </h4>
-
-                  {/* Suggester Subtitle */}
-                  <p className="text-xs text-charcoal-muted mt-1 flex items-center gap-1.5">
-                    <span>Suggested by</span>
-                    <span className="font-semibold text-charcoal">
-                      {dish.suggestedBy}
-                    </span>
-                  </p>
-
-                  {/* Likers / Dislikers pills */}
-                  {(likerNames.length > 0 || dislikerNames.length > 0) && (
-                    <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
-                      {likerNames.length > 0 && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200"
-                          title={`Liked by: ${likerNames.join(', ')}`}
-                        >
-                          <Heart className="w-3 h-3 text-emerald-600 fill-emerald-600" />
-                          <span>{likerNames.join(', ')}</span>
-                        </span>
-                      )}
-
-                      {dislikerNames.length > 0 && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 text-red-800 border border-red-200"
-                          title={`Disliked by: ${dislikerNames.join(', ')}`}
-                        >
-                          <ThumbsDown className="w-3 h-3 text-red-500" />
-                          <span>Avoid: {dislikerNames.join(', ')}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => onDeleteDish(dish.id)}
+                    className="p-1.5 text-charcoal-subtle hover:text-red-600 transition-colors rounded-lg"
+                    title={`Delete "${dish.name}"`}
+                    aria-label={`Delete ${dish.name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
-                {/* Per-member votes manager dropdown/drawer */}
-                <div className="mt-3.5">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedDishId(isExpanded ? null : dish.id)}
-                    className="text-[11px] font-semibold text-charcoal-muted hover:text-primary transition-colors flex items-center gap-1"
-                  >
-                    <span>{isExpanded ? '▲ Hide member votes' : '▼ Update member likes & dislikes'}</span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="mt-2.5 p-2.5 bg-background rounded-xl border border-border space-y-2 text-xs animate-in fade-in duration-100">
-                      <p className="text-[10px] uppercase font-bold text-charcoal-muted">
-                        Vote on behalf of members:
-                      </p>
-                      <div className="space-y-1.5">
-                        {members.map((member) => {
-                          const mLike = dish.likes.includes(member.id);
-                          const mDislike = dish.dislikes.includes(member.id);
-
-                          return (
-                            <div
-                              key={member.id}
-                              className="flex items-center justify-between gap-2 py-1 px-1.5 rounded-lg hover:bg-surface"
-                            >
-                              <span className="font-medium text-charcoal truncate flex-1 text-xs">
-                                {member.name}
-                              </span>
-
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => onToggleLike(dish.id, member.id)}
-                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
-                                    mLike
-                                      ? 'bg-emerald-600 text-white border-emerald-600'
-                                      : 'bg-surface text-emerald-800 border-emerald-200 hover:bg-emerald-50'
-                                  }`}
-                                  title={`Toggle Like for ${member.name}`}
-                                >
-                                  ❤️ Like
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onToggleDislike(dish.id, member.id)}
-                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
-                                    mDislike
-                                      ? 'bg-red-600 text-white border-red-600'
-                                      : 'bg-surface text-red-800 border-red-200 hover:bg-red-50'
-                                  }`}
-                                  title={`Toggle Dislike for ${member.name}`}
-                                >
-                                  👎 Avoid
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bottom Action Buttons: Like & Dislike for active user */}
-                <div className="pt-3 mt-3 border-t border-border-light flex items-center gap-2">
-                  {/* Like Button */}
-                  <button
-                    type="button"
-                    onClick={() => onToggleLike(dish.id)}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
-                      isLikedByMe
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-background hover:bg-emerald-50 text-charcoal border border-border hover:border-emerald-300'
-                    }`}
-                  >
-                    <Heart
-                      className={`w-3.5 h-3.5 ${
-                        isLikedByMe ? 'fill-white text-white' : 'text-emerald-600'
-                      }`}
-                    />
-                    <span>Like</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                        isLikedByMe ? 'bg-emerald-700 text-white' : 'bg-border-light text-charcoal'
-                      }`}
-                    >
-                      {dish.likes.length}
+                {/* Counter & Action Row */}
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-light">
+                  {/* Subtle vote counters */}
+                  <div className="flex items-center gap-3 text-xs font-medium text-charcoal-muted">
+                    <span className="flex items-center gap-1">
+                      <Heart className={`w-3.5 h-3.5 ${dish.likes.length > 0 ? 'text-emerald-700 fill-emerald-700' : 'text-charcoal-subtle'}`} />
+                      <span className={dish.likes.length > 0 ? 'font-semibold text-charcoal' : ''}>
+                        {dish.likes.length}
+                      </span>
                     </span>
-                  </button>
 
-                  {/* Don't Like Button */}
-                  <button
-                    type="button"
-                    onClick={() => onToggleDislike(dish.id)}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
-                      isDislikedByMe
-                        ? 'bg-red-600 text-white shadow-sm'
-                        : 'bg-background hover:bg-red-50 text-charcoal border border-border hover:border-red-300'
-                    }`}
-                  >
-                    <ThumbsDown
-                      className={`w-3.5 h-3.5 ${
-                        isDislikedByMe ? 'text-white' : 'text-red-500'
-                      }`}
-                    />
-                    <span>Don&apos;t Like</span>
                     {dish.dislikes.length > 0 && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          isDislikedByMe ? 'bg-red-700 text-white' : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {dish.dislikes.length}
+                      <span className="flex items-center gap-1 text-red-700 font-medium">
+                        <ThumbsDown className="w-3.5 h-3.5" />
+                        <span>{dish.dislikes.length}</span>
                       </span>
                     )}
-                  </button>
+                  </div>
+
+                  {/* Touch-friendly Like / Don't like buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Like button */}
+                    <button
+                      type="button"
+                      onClick={() => onToggleLike(dish.id)}
+                      className={`min-h-touch px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                        isLikedByMe
+                          ? 'bg-primary text-white'
+                          : 'bg-background hover:bg-primary-soft text-charcoal border border-border'
+                      }`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${isLikedByMe ? 'fill-white' : 'text-primary'}`} />
+                      <span>{isLikedByMe ? 'Liked' : 'Like'}</span>
+                    </button>
+
+                    {/* Don't like button */}
+                    <button
+                      type="button"
+                      onClick={() => onToggleDislike(dish.id)}
+                      className={`min-h-touch px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                        isDislikedByMe
+                          ? 'bg-dislike-bg text-dislike-text border border-dislike-border'
+                          : 'bg-background hover:bg-red-50 text-charcoal-muted hover:text-dislike-text border border-border'
+                      }`}
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      <span className="hidden xs:inline">Don&apos;t like</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -360,3 +163,4 @@ export const DishFeed: React.FC<DishFeedProps> = ({
     </section>
   );
 };
+

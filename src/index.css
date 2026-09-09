@@ -3,17 +3,21 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
   body {
-    @apply bg-background text-charcoal font-sans;
+    @apply bg-background text-charcoal font-sans antialiased;
     color: #1F2933;
-    background-color: #F8F7F4;
+    background-color: #FAFAF8;
   }
 }
 
-/* Custom subtle scrollbar */
+/* Custom minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -21,10 +25,11 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
+  background: #E5E7EB;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: #D1D5DB;
 }
+
