@@ -363,6 +363,7 @@ export function App() {
             activeMemberId={effectiveMemberId}
             dishes={appState.dishes}
             onAddDish={handleAddDish}
+            onAddPreference={handleAddDishPreference}
             onOpenDashboard={() => setCurrentView('dashboard')}
             isSubmitting={isSubmitting}
           />
