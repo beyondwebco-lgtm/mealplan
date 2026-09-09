@@ -4,11 +4,13 @@ import { sampleGroup, sampleMembers, sampleDishes } from './data/sampleData';
 import { api } from './services/api';
 import { Navbar } from './components/Navbar';
 import { MemberSelectScreen } from './components/MemberSelectScreen';
+import { SimpleHomePage } from './components/SimpleHomePage';
 import { HeroDishInput } from './components/HeroDishInput';
 import { DishFeed } from './components/DishFeed';
 import { GroupInsights } from './components/GroupInsights';
 import { MembersSection } from './components/MembersSection';
 import { ToastContainer } from './components/Toast';
+import { ArrowLeft } from 'lucide-react';
 
 const FALLBACK_STATE: AppState = {
   group: sampleGroup,
@@ -28,6 +30,9 @@ export function App() {
   const [isSelectingMember, setIsSelectingMember] = useState<boolean>(() => {
     return !localStorage.getItem(STORAGE_KEY);
   });
+
+  // Current view: 'home' (simplified entry point) or 'dashboard' (full features)
+  const [currentView, setCurrentView] = useState<'home' | 'dashboard'>('home');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(false);
@@ -65,7 +70,7 @@ export function App() {
   // Load board from PostgreSQL / local state
   const loadBoard = useCallback(async () => {
     try {
-      const data = await api.fetchBoard('group-our-meals');
+      const data = await api.fetchBoard('group-mealtogether');
       if (data && data.group && Array.isArray(data.members) && Array.isArray(data.dishes)) {
         setAppState(data);
         setIsDbConnected(true);
@@ -336,53 +341,96 @@ export function App() {
         group={appState.group}
         members={appState.members}
         activeMemberId={effectiveMemberId}
-        onChangeActiveMember={(id) => handleSelectCurrentMember(id)}
+        currentView={currentView}
+        onNavigate={(view) => setCurrentView(view)}
         onOpenMembers={scrollToMembers}
         onScrollToSection={scrollToSection}
         onSwitchMember={handleStartSwitchMember}
         isDbConnected={isDbConnected}
       />
 
-      {/* Main Single-Column Mobile-First Container */}
+      {/* Main Single-Column Container */}
       <main className="flex-1 max-w-xl sm:max-w-2xl w-full mx-auto px-4 py-4 sm:py-6 space-y-6 pb-24 sm:pb-12">
-        {/* 1. Greeting & What should we eat? Hero Input */}
-        <HeroDishInput
-          members={appState.members}
-          activeMemberId={effectiveMemberId}
-          onChangeActiveMember={(id) => handleSelectCurrentMember(id)}
-          onAddDish={handleAddDish}
-          isSubmitting={isSubmitting}
-        />
-
-        {/* 2. Dish Ideas List */}
-        <DishFeed
-          dishes={appState.dishes}
-          activeMemberId={effectiveMemberId}
-          onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
-          onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
-          onDeleteDish={handleDeleteDish}
-        />
-
-        {/* 3. Group Insights: What Everyone Likes & Not Everyone Likes */}
-        <GroupInsights
-          dishes={appState.dishes}
-          members={appState.members}
-        />
-
-        {/* 4. Members Section */}
-        <div ref={membersSectionRef}>
-          <MembersSection
+        {currentView === 'home' ? (
+          /* =========================================================
+             SIMPLIFIED HOMEPAGE
+             - Top: What should we eat? Add Ideas
+             - Below: Likes & Dislikes
+             - Bottom: Dashboard Button
+             ========================================================= */
+          <SimpleHomePage
             members={appState.members}
-            dishes={appState.dishes}
             activeMemberId={effectiveMemberId}
-            onSelectMember={(id) => handleSelectCurrentMember(id)}
-            onAddMember={handleAddMember}
-            onDeleteMember={handleDeleteMember}
-            onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
-            onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
-            onAddDishPreference={handleAddDishPreference}
+            dishes={appState.dishes}
+            onAddDish={handleAddDish}
+            onOpenDashboard={() => setCurrentView('dashboard')}
+            isSubmitting={isSubmitting}
           />
-        </div>
+        ) : (
+          /* =========================================================
+             DETAILED DASHBOARD
+             - Back to Home bar
+             - Full Hero Dish Input
+             - Full Dish Ideas Feed with Voting
+             - Detailed Group Insights
+             - Members Section & Taste Profiles
+             ========================================================= */
+          <div className="space-y-6 animate-in fade-in duration-150">
+            {/* Header sub-bar */}
+            <div className="flex items-center justify-between pb-1 border-b border-border-light">
+              <button
+                type="button"
+                onClick={() => setCurrentView('home')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-charcoal hover:text-primary transition-colors py-1 px-2.5 rounded-lg bg-surface border border-border hover:border-primary/30 min-h-touch"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Home</span>
+              </button>
+              <h1 className="text-sm font-bold text-charcoal">
+                Dashboard
+              </h1>
+            </div>
+
+            {/* 1. Greeting & What should we eat? Hero Input */}
+            <HeroDishInput
+              members={appState.members}
+              activeMemberId={effectiveMemberId}
+              onChangeActiveMember={(id) => handleSelectCurrentMember(id)}
+              onAddDish={handleAddDish}
+              isSubmitting={isSubmitting}
+            />
+
+            {/* 2. Dish Ideas List */}
+            <DishFeed
+              dishes={appState.dishes}
+              activeMemberId={effectiveMemberId}
+              onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
+              onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
+              onDeleteDish={handleDeleteDish}
+            />
+
+            {/* 3. Group Insights: What Everyone Likes & Not Everyone Likes */}
+            <GroupInsights
+              dishes={appState.dishes}
+              members={appState.members}
+            />
+
+            {/* 4. Members Section */}
+            <div ref={membersSectionRef}>
+              <MembersSection
+                members={appState.members}
+                dishes={appState.dishes}
+                activeMemberId={effectiveMemberId}
+                onSelectMember={(id) => handleSelectCurrentMember(id)}
+                onAddMember={handleAddMember}
+                onDeleteMember={handleDeleteMember}
+                onToggleLike={(dishId, targetId) => handleToggleLike(dishId, targetId || effectiveMemberId)}
+                onToggleDislike={(dishId, targetId) => handleToggleDislike(dishId, targetId || effectiveMemberId)}
+                onAddDishPreference={handleAddDishPreference}
+              />
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Minimal Footer */}

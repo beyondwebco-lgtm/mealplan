@@ -3,7 +3,7 @@ import type { AppState } from '../types';
 const API_BASE = '/api';
 
 export const api = {
-  async fetchBoard(groupId: string = 'group-our-meals'): Promise<AppState> {
+  async fetchBoard(groupId: string = 'group-mealtogether'): Promise<AppState> {
     const res = await fetch(`${API_BASE}/board?groupId=${encodeURIComponent(groupId)}`);
     if (!res.ok) throw new Error('Failed to fetch board data');
     return res.json();
@@ -24,7 +24,7 @@ export const api = {
     return res.json();
   },
 
-  async deleteDish(dishId: string, groupId: string = 'group-our-meals'): Promise<AppState> {
+  async deleteDish(dishId: string, groupId: string = 'group-mealtogether'): Promise<AppState> {
     const res = await fetch(`${API_BASE}/dishes/${dishId}?groupId=${encodeURIComponent(groupId)}`, {
       method: 'DELETE',
     });
@@ -32,7 +32,7 @@ export const api = {
     return res.json();
   },
 
-  async toggleLike(dishId: string, memberId: string, groupId: string = 'group-our-meals'): Promise<AppState> {
+  async toggleLike(dishId: string, memberId: string, groupId: string = 'group-mealtogether'): Promise<AppState> {
     const res = await fetch(`${API_BASE}/dishes/${dishId}/like`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -42,7 +42,7 @@ export const api = {
     return res.json();
   },
 
-  async toggleDislike(dishId: string, memberId: string, groupId: string = 'group-our-meals'): Promise<AppState> {
+  async toggleDislike(dishId: string, memberId: string, groupId: string = 'group-mealtogether'): Promise<AppState> {
     const res = await fetch(`${API_BASE}/dishes/${dishId}/dislike`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -62,7 +62,7 @@ export const api = {
     return res.json();
   },
 
-  async deleteMember(memberId: string, groupId: string = 'group-our-meals'): Promise<AppState> {
+  async deleteMember(memberId: string, groupId: string = 'group-mealtogether'): Promise<AppState> {
     const res = await fetch(`${API_BASE}/members/${memberId}?groupId=${encodeURIComponent(groupId)}`, {
       method: 'DELETE',
     });

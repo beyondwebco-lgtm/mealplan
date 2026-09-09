@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // Helper to fetch full board state for a group
-async function getFullBoard(groupId: string = 'group-our-meals') {
+async function getFullBoard(groupId: string = 'group-mealtogether') {
   // 1. Get Group
   let groupRes = await pool.query('SELECT * FROM groups WHERE id = $1', [groupId]);
   if (groupRes.rows.length === 0) {
@@ -91,7 +91,7 @@ async function getFullBoard(groupId: string = 'group-our-meals') {
 // GET full board (group, members, dishes with likes & dislikes)
 app.get('/api/board', async (req, res) => {
   try {
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
     const board = await getFullBoard(groupId);
     if (!board) return res.status(404).json({ error: 'Board not found' });
     res.json(board);
@@ -104,7 +104,7 @@ app.get('/api/board', async (req, res) => {
 // POST add dish idea
 app.post('/api/dishes', async (req, res) => {
   try {
-    const { groupId = 'group-our-meals', name, suggestedBy, suggestedByMemberId } = req.body;
+    const { groupId = 'group-mealtogether', name, suggestedBy, suggestedByMemberId } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Dish name is required' });
     }
@@ -139,7 +139,7 @@ app.post('/api/dishes', async (req, res) => {
 app.delete('/api/dishes/:id', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
 
     await pool.query('DELETE FROM dishes WHERE id = $1', [dishId]);
 
@@ -155,7 +155,7 @@ app.delete('/api/dishes/:id', async (req, res) => {
 app.post('/api/dishes/:id/like', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const { memberId, groupId = 'group-our-meals' } = req.body;
+    const { memberId, groupId = 'group-mealtogether' } = req.body;
 
     if (!memberId) return res.status(400).json({ error: 'memberId is required' });
 
@@ -191,7 +191,7 @@ app.post('/api/dishes/:id/like', async (req, res) => {
 app.post('/api/dishes/:id/dislike', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const { memberId, groupId = 'group-our-meals' } = req.body;
+    const { memberId, groupId = 'group-mealtogether' } = req.body;
 
     if (!memberId) return res.status(400).json({ error: 'memberId is required' });
 
@@ -226,7 +226,7 @@ app.post('/api/dishes/:id/dislike', async (req, res) => {
 // POST add new member
 app.post('/api/members', async (req, res) => {
   try {
-    const { groupId = 'group-our-meals', name, avatarColor } = req.body;
+    const { groupId = 'group-mealtogether', name, avatarColor } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Member name is required' });
 
     const memberId = `member-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -247,7 +247,7 @@ app.post('/api/members', async (req, res) => {
 app.delete('/api/members/:id', async (req, res) => {
   try {
     const memberId = req.params.id;
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
 
     await pool.query('DELETE FROM members WHERE id = $1', [memberId]);
 

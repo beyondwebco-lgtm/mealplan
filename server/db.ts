@@ -78,17 +78,17 @@ export async function initDb() {
          OR name IN ('Rahul', 'Priya', 'Arjun', 'Ananya')
     `);
 
-    // 3. Check and seed default group "Our Group"
-    const groupCheck = await client.query('SELECT COUNT(*) FROM groups WHERE id = $1', ['group-our-meals']);
+    // 3. Check and seed default group "MealTogether"
+    const groupCheck = await client.query('SELECT COUNT(*) FROM groups WHERE id = $1', ['group-mealtogether']);
     const count = parseInt(groupCheck.rows[0].count, 10);
 
     if (count === 0) {
       console.log('Seeding initial MealTogether data into PostgreSQL...');
-      const groupId = 'group-our-meals';
+      const groupId = 'group-mealtogether';
 
       await client.query(
         `INSERT INTO groups (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
-        [groupId, 'Our Group']
+        [groupId, 'MealTogether']
       );
 
       // Members
@@ -109,99 +109,7 @@ export async function initDb() {
         );
       }
 
-      // Dishes
-      const initialDishes = [
-        {
-          id: 'dish-1',
-          name: 'Dosa',
-          suggestedBy: 'Jinka',
-          suggestedByMemberId: 'member-jinka',
-          likes: ['member-jinka', 'member-arun', 'member-maneesh', 'member-vishwa', 'member-saipavan', 'member-indra'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-2',
-          name: 'Paneer Butter Masala',
-          suggestedBy: 'Maneesh',
-          suggestedByMemberId: 'member-maneesh',
-          likes: ['member-maneesh', 'member-jinka', 'member-arun', 'member-indra', 'member-saipavan'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-3',
-          name: 'Dal Tadka',
-          suggestedBy: 'Arun',
-          suggestedByMemberId: 'member-arun',
-          likes: ['member-arun', 'member-jinka', 'member-maneesh', 'member-vishwa', 'member-tata'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-4',
-          name: 'Idli',
-          suggestedBy: 'Sai Pavan',
-          suggestedByMemberId: 'member-saipavan',
-          likes: ['member-saipavan', 'member-jinka', 'member-arun', 'member-indra'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-5',
-          name: 'Upma',
-          suggestedBy: 'Vishwa',
-          suggestedByMemberId: 'member-vishwa',
-          likes: ['member-vishwa', 'member-tata', 'member-maneesh'],
-          dislikes: ['member-indra'],
-        },
-        {
-          id: 'dish-6',
-          name: 'Bitter Gourd Curry',
-          suggestedBy: 'Tata',
-          suggestedByMemberId: 'member-tata',
-          likes: ['member-tata'],
-          dislikes: ['member-maneesh', 'member-arun', 'member-jinka', 'member-saipavan'],
-        },
-        {
-          id: 'dish-7',
-          name: 'Brinjal Curry',
-          suggestedBy: 'Maneesh',
-          suggestedByMemberId: 'member-maneesh',
-          likes: ['member-maneesh'],
-          dislikes: ['member-vishwa', 'member-arun', 'member-indra'],
-        },
-        {
-          id: 'dish-8',
-          name: 'Fish Curry',
-          suggestedBy: 'Indra',
-          suggestedByMemberId: 'member-indra',
-          likes: ['member-indra', 'member-vishwa'],
-          dislikes: ['member-jinka', 'member-tata'],
-        },
-      ];
-
-      for (const d of initialDishes) {
-        await client.query(
-          `INSERT INTO dishes (id, group_id, name, suggested_by, suggested_by_member_id)
-           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
-          [d.id, groupId, d.name, d.suggestedBy, d.suggestedByMemberId]
-        );
-
-        for (const likerId of d.likes) {
-          const likeId = `like-${likerId}-${d.id}`;
-          await client.query(
-            `INSERT INTO likes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [likeId, likerId, d.id]
-          );
-        }
-
-        for (const dislikerId of d.dislikes) {
-          const dislikeId = `dislike-${dislikerId}-${d.id}`;
-          await client.query(
-            `INSERT INTO dislikes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [dislikeId, dislikerId, d.id]
-          );
-        }
-      }
-
-      console.log('Seeded MealTogether successfully with Jinka, Arun, Maneesh, Vishwa, Sai Pavan, Tata, Indra!');
+      console.log('Seeded MealTogether successfully with Jinka, Arun, Maneesh, Vishwa, Sai Pavan, Tata, Indra (0 dishes)!');
     }
   } catch (err) {
     console.error('Database initialization error:', err);

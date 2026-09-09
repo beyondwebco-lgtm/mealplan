@@ -77,14 +77,14 @@ async function ensureDbInit() {
     `);
 
     // Check default group
-    const groupCheck = await client.query('SELECT COUNT(*) FROM groups WHERE id = $1', ['group-our-meals']);
+    const groupCheck = await client.query('SELECT COUNT(*) FROM groups WHERE id = $1', ['group-mealtogether']);
     const count = parseInt(groupCheck.rows[0].count, 10);
 
     if (count === 0) {
-      const groupId = 'group-our-meals';
+      const groupId = 'group-mealtogether';
       await client.query(
         `INSERT INTO groups (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
-        [groupId, 'Our Group']
+        [groupId, 'MealTogether']
       );
 
       const initialMembers = [
@@ -102,97 +102,6 @@ async function ensureDbInit() {
           `INSERT INTO members (id, group_id, name, avatar_color) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
           [m.id, groupId, m.name, m.avatarColor]
         );
-      }
-
-      const initialDishes = [
-        {
-          id: 'dish-1',
-          name: 'Dosa',
-          suggestedBy: 'Jinka',
-          suggestedByMemberId: 'member-jinka',
-          likes: ['member-jinka', 'member-arun', 'member-maneesh', 'member-vishwa', 'member-saipavan', 'member-indra'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-2',
-          name: 'Paneer Butter Masala',
-          suggestedBy: 'Maneesh',
-          suggestedByMemberId: 'member-maneesh',
-          likes: ['member-maneesh', 'member-jinka', 'member-arun', 'member-indra', 'member-saipavan'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-3',
-          name: 'Dal Tadka',
-          suggestedBy: 'Arun',
-          suggestedByMemberId: 'member-arun',
-          likes: ['member-arun', 'member-jinka', 'member-maneesh', 'member-vishwa', 'member-tata'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-4',
-          name: 'Idli',
-          suggestedBy: 'Sai Pavan',
-          suggestedByMemberId: 'member-saipavan',
-          likes: ['member-saipavan', 'member-jinka', 'member-arun', 'member-indra'],
-          dislikes: [],
-        },
-        {
-          id: 'dish-5',
-          name: 'Upma',
-          suggestedBy: 'Vishwa',
-          suggestedByMemberId: 'member-vishwa',
-          likes: ['member-vishwa', 'member-tata', 'member-maneesh'],
-          dislikes: ['member-indra'],
-        },
-        {
-          id: 'dish-6',
-          name: 'Bitter Gourd Curry',
-          suggestedBy: 'Tata',
-          suggestedByMemberId: 'member-tata',
-          likes: ['member-tata'],
-          dislikes: ['member-maneesh', 'member-arun', 'member-jinka', 'member-saipavan'],
-        },
-        {
-          id: 'dish-7',
-          name: 'Brinjal Curry',
-          suggestedBy: 'Maneesh',
-          suggestedByMemberId: 'member-maneesh',
-          likes: ['member-maneesh'],
-          dislikes: ['member-vishwa', 'member-arun', 'member-indra'],
-        },
-        {
-          id: 'dish-8',
-          name: 'Fish Curry',
-          suggestedBy: 'Indra',
-          suggestedByMemberId: 'member-indra',
-          likes: ['member-indra', 'member-vishwa'],
-          dislikes: ['member-jinka', 'member-tata'],
-        },
-      ];
-
-      for (const d of initialDishes) {
-        await client.query(
-          `INSERT INTO dishes (id, group_id, name, suggested_by, suggested_by_member_id)
-           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
-          [d.id, groupId, d.name, d.suggestedBy, d.suggestedByMemberId]
-        );
-
-        for (const likerId of d.likes) {
-          const likeId = `like-${likerId}-${d.id}`;
-          await client.query(
-            `INSERT INTO likes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [likeId, likerId, d.id]
-          );
-        }
-
-        for (const dislikerId of d.dislikes) {
-          const dislikeId = `dislike-${dislikerId}-${d.id}`;
-          await client.query(
-            `INSERT INTO dislikes (id, member_id, dish_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [dislikeId, dislikerId, d.id]
-          );
-        }
       }
     }
 
@@ -214,7 +123,7 @@ app.use(async (_req, _res, next) => {
   next();
 });
 
-async function getFullBoard(groupId: string = 'group-our-meals') {
+async function getFullBoard(groupId: string = 'group-mealtogether') {
   let groupRes = await pool.query('SELECT * FROM groups WHERE id = $1', [groupId]);
   if (groupRes.rows.length === 0) {
     groupRes = await pool.query('SELECT * FROM groups LIMIT 1');
@@ -291,7 +200,7 @@ const router = express.Router();
 
 router.get('/board', async (req, res) => {
   try {
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
     const board = await getFullBoard(groupId);
     if (!board) return res.status(404).json({ error: 'Board not found' });
     res.json(board);
@@ -303,7 +212,7 @@ router.get('/board', async (req, res) => {
 
 router.post('/dishes', async (req, res) => {
   try {
-    const { groupId = 'group-our-meals', name, suggestedBy, suggestedByMemberId } = req.body;
+    const { groupId = 'group-mealtogether', name, suggestedBy, suggestedByMemberId } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Dish name is required' });
     }
@@ -336,7 +245,7 @@ router.post('/dishes', async (req, res) => {
 router.delete('/dishes/:id', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
 
     await pool.query('DELETE FROM dishes WHERE id = $1', [dishId]);
 
@@ -351,7 +260,7 @@ router.delete('/dishes/:id', async (req, res) => {
 router.post('/dishes/:id/like', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const { memberId, groupId = 'group-our-meals' } = req.body;
+    const { memberId, groupId = 'group-mealtogether' } = req.body;
 
     if (!memberId) return res.status(400).json({ error: 'memberId is required' });
 
@@ -382,7 +291,7 @@ router.post('/dishes/:id/like', async (req, res) => {
 router.post('/dishes/:id/dislike', async (req, res) => {
   try {
     const dishId = req.params.id;
-    const { memberId, groupId = 'group-our-meals' } = req.body;
+    const { memberId, groupId = 'group-mealtogether' } = req.body;
 
     if (!memberId) return res.status(400).json({ error: 'memberId is required' });
 
@@ -412,7 +321,7 @@ router.post('/dishes/:id/dislike', async (req, res) => {
 
 router.post('/members', async (req, res) => {
   try {
-    const { groupId = 'group-our-meals', name, avatarColor } = req.body;
+    const { groupId = 'group-mealtogether', name, avatarColor } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Member name is required' });
 
     const memberId = `member-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -432,7 +341,7 @@ router.post('/members', async (req, res) => {
 router.delete('/members/:id', async (req, res) => {
   try {
     const memberId = req.params.id;
-    const groupId = (req.query.groupId as string) || 'group-our-meals';
+    const groupId = (req.query.groupId as string) || 'group-mealtogether';
 
     await pool.query('DELETE FROM members WHERE id = $1', [memberId]);
 
